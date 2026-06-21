@@ -126,7 +126,6 @@ services:
       DB_USERNAME: communication
       DB_PASSWORD: communication
       KAFKA_BOOTSTRAP_SERVERS: broker:9092
-      IDENTITY_JWKS_URI: http://identity-service:8081/oauth2/jwks
       REDIS_URL: redis://redis:6379
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
     depends_on:
@@ -165,7 +164,6 @@ services:
       DB_PASSWORD: match
       KAFKA_BOOTSTRAP_SERVERS: broker:9092
       REDIS_URL: redis://redis:6379
-      IDENTITY_JWKS_URI: http://identity-service:8081/oauth2/jwks
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
     depends_on:
       match-db:
@@ -184,7 +182,6 @@ services:
       DB_PASSWORD: notification
       KAFKA_BOOTSTRAP_SERVERS: broker:9092
       REDIS_URL: redis://redis:6379
-      IDENTITY_JWKS_URI: http://identity-service:8081/oauth2/jwks
       MATCH_SERVICE_URL: http://match-service:8082/api/v1
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
     depends_on:
