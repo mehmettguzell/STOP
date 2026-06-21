@@ -4,6 +4,13 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "5"
 
+x-db-healthcheck: &db-healthcheck
+  test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
 services:
   broker:
     image: apache/kafka:latest
@@ -45,11 +52,7 @@ services:
       - communication_data:/var/lib/postgresql/data
     restart: unless-stopped
     logging: *default-logging
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    healthcheck: *db-healthcheck
 
   identity-db:
     image: postgres:15
@@ -62,11 +65,7 @@ services:
       - identity_data:/var/lib/postgresql/data
     restart: unless-stopped
     logging: *default-logging
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    healthcheck: *db-healthcheck
 
   match-db:
     image: postgres:15
@@ -79,11 +78,7 @@ services:
       - match_data:/var/lib/postgresql/data
     restart: unless-stopped
     logging: *default-logging
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    healthcheck: *db-healthcheck
 
   notification-db:
     image: postgres:15
@@ -96,11 +91,7 @@ services:
       - notification_data:/var/lib/postgresql/data
     restart: unless-stopped
     logging: *default-logging
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    healthcheck: *db-healthcheck
 
   redis:
     image: redis:7-alpine
