@@ -196,20 +196,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ------ UI -------
-  # TODO: We might delete these
-
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
-    ports:
-      - "8090:8080"
-    environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker:9092
-    depends_on:
-      - broker
-
 volumes:
   identity_data:
   match_data:
