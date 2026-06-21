@@ -1,0 +1,91 @@
+server:
+  port: ${COMMUNICATION_PORT:8084}
+
+spring:
+  application:
+    name: communication-service
+
+  security:
+    jwt:
+      public-key: classpath:keys/public.pem
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${IDENTITY_JWKS_URI:http://localhost:8081/oauth2/jwks}
+
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+      lettuce:
+        command-timeout: 2s        # Redis 2s'de yanıt vermezse timeout → cache miss
+        shutdown-timeout: 100ms
+  cache:
+    type: redis
+    redis:
+      time-to-live: 10m
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5436/communication-db}
+    username: ${DB_USERNAME:communication}
+    password: ${DB_PASSWORD:communication}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 5000
+      initialization-fail-timeout: -1
+      leak-detection-threshold: 10000
+      keepalive-time: 300000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+  flyway:
+    enabled: true
+    connect-retries: 10
+    connect-retries-interval: 5s
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    persistAuthorization: true
+
+logging:
+  file:
+    name: logs/communication-service.log
+  level:
+    root: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    level: "%5p [communication-service]"

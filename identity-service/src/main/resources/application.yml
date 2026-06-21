@@ -1,0 +1,101 @@
+server:
+  port: ${IDENTITY_PORT:8081}
+
+spring:
+  application:
+    name: identity-service
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/identity-db}
+    username: ${DB_USERNAME:identity}
+    password: ${DB_PASSWORD:identity}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 5000
+      initialization-fail-timeout: -1
+      leak-detection-threshold: 10000
+      keepalive-time: 300000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    enabled: true
+    connect-retries: 10
+    connect-retries-interval: 5s
+
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 10m
+
+  kafka:
+    bootstrap-servers: localhost:9093
+    consumer:
+      group-id: identity-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
+identity:
+  cors:
+    allowed-origin-patterns:
+      - "http://localhost:*"
+      - "http://127.0.0.1:*"
+      - "http://10.0.2.2:*"
+      - "http://192.168.*:*"
+
+  tracing:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    persistAuthorization: true
+
+logging:
+  file:
+    name: logs/identity-service.log
+  level:
+    root: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    level: "%5p [identity-service]"

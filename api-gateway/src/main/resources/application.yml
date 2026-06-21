@@ -1,0 +1,225 @@
+server:
+  port: ${GATEWAY_PORT:8080}
+
+spring:
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+  application:
+    name: api-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER:identity-service}
+  cloud:
+    gateway:
+      server:
+        webmvc:
+          http-client:
+            connect-timeout: 3000
+            response-timeout: 5s   # Redis command-timeout(2s) + işlem süresi için yeterli
+          routes:
+            - id: identity-auth
+              uri: ${gateway.services.auth}
+              order: 0
+              predicates:
+                - Path=/api/v1/auth/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: identity
+                    fallbackUri: forward:/fallback/service-unavailable
+
+            - id: identity-users
+              uri: ${gateway.services.identity}
+              order: 1
+              predicates:
+                - Path=/api/v1/users/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: identity
+                    fallbackUri: forward:/fallback/service-unavailable
+
+            - id: friends-service
+              uri: ${gateway.services.friendship}
+              order: 14
+              predicates:
+                - Path=/api/v1/friends/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: identity
+                    fallbackUri: forward:/fallback/service-unavailable
+
+            - id: moderation-service
+              uri: ${gateway.services.moderation}
+              order: 14
+              predicates:
+                - Path=/api/v1/reports/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: identity
+                    fallbackUri: forward:/fallback/service-unavailable
+
+            - id: identity-jwks
+              uri: ${gateway.services.identity}
+              order: 2
+              predicates:
+                - Path=/oauth2/jwks
+
+            - id: match-service
+              uri: ${gateway.services.match}
+              order: 10
+              predicates:
+                - Path=/api/v1/match/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: match
+                    fallbackUri: forward:/fallback/service-unavailable
+
+            - id: participation-service
+              uri: ${gateway.services.participation}
+              order: 11
+              predicates:
+                - Path=/api/v1/participation/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: match
+                    fallbackUri: forward:/fallback/service-unavailable
+
+            - id: invitation-service
+              uri: ${gateway.services.invitation}
+              order: 12
+              predicates:
+                - Path=/api/v1/invitations/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: match
+                    fallbackUri: forward:/fallback/service-unavailable
+
+            - id: communication-service-ws
+              uri: ${gateway.services.communication}
+              order: 13
+              predicates:
+                - Path=/ws/**
+
+            - id: communication-service
+              uri: ${gateway.services.communication}
+              order: 14
+              predicates:
+                - Path=/api/v1/chat/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: communication
+                    fallbackUri: forward:/fallback/service-unavailable
+
+            - id: notification-service
+              uri: ${gateway.services.notification}
+              order: 15
+              predicates:
+                - Path=/api/v1/notifications/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    id: notification
+                    fallbackUri: forward:/fallback/service-unavailable
+
+
+gateway:
+  rate-limit:
+    enabled: true
+    capacity: ${GATEWAY_RATE_LIMIT_CAPACITY:200}
+    refill-period: ${GATEWAY_RATE_LIMIT_PERIOD:1m}
+
+  services:
+    auth: ${GATEWAY_IDENTITY_URI:http://localhost:8081}
+    identity: ${GATEWAY_IDENTITY_URI:http://localhost:8081}
+    trustAndRank: ${GATEWAY_IDENTITY_URI:http://localhost:8081}
+    friendship: ${GATEWAY_IDENTITY_URI:http://localhost:8081}
+    moderation: ${GATEWAY_MODERATION_URI:http://localhost:8081}
+
+
+    match: ${GATEWAY_MATCH_URI:http://localhost:8082}
+    participation: ${GATEWAY_MATCH_URI:http://localhost:8082}
+    invitation: ${GATEWAY_MATCH_URI:http://localhost:8082}
+
+    notification: ${GATEWAY_NOTIFICATION_URI:http://localhost:8083}
+    communication: ${GATEWAY_COMMUNICATION_URI:http://localhost:8084}
+    communication-ws: ${GATEWAY_COMMUNICATION_WS_URI:ws://localhost:8084}
+
+    frontend: ${GATEWAY_FRONTEND_URI:http://localhost:8091}
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        # Hangi exception'lar başarısızlık sayılsın
+        recordExceptions:
+          - java.io.IOException
+          - java.net.ConnectException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.client.ResourceAccessException
+      # Kritik olmayan servisler için daha toleranslı config
+      non-critical:
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 60
+        waitDurationInOpenState: 15s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - java.io.IOException
+          - java.net.ConnectException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.client.ResourceAccessException
+    instances:
+      identity:
+        baseConfig: default
+      match:
+        baseConfig: default
+      communication:
+        baseConfig: default
+      notification:
+        baseConfig: non-critical   # Bildirimler kritik değil, daha toleranslı
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  file:
+    name: logs/api-gateway.log
+  level:
+    root: INFO
+    org.springframework.security: WARN
+    org.springframework.cloud.gateway: INFO
+  pattern:
+    level: "%5p [api-gateway] [%X{correlationId:-}]"

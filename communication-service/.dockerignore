@@ -1,0 +1,34 @@
+# ==========================================
+# GÜVENLİK VE YAPILANDIRMA DOSYALARI
+# ==========================================
+.git/
+.gitignore
+.env
+docker-compose*
+Dockerfile
+.dockerignore
+
+# ==========================================
+# DERLEME VE HEDEF DOSYALARI (Çok Kritik)
+# ==========================================
+# Biz zaten Multi-Stage içinde Maven ile derleme yapıyoruz.
+# Bu yüzden bilgisayarımızdaki target klasörünün Docker'a gitmesine gerek yok.
+target/
+build/
+out/
+
+# ==========================================
+# IDE (GELİŞTİRME ORTAMI) DOSYALARI
+# ==========================================
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# ==========================================
+# DİĞER GEREKSİZ DOSYALAR
+# ==========================================
+*.md
+*.log
