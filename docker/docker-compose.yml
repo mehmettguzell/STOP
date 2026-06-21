@@ -1,5 +1,3 @@
-# Database ve microServislerin dışarıya açılan portları kapatılmalı.
-
 services:
   broker:
     image: apache/kafka:latest
@@ -27,6 +25,21 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+
+  communication-db:
+    image: postgres:15
+    container_name: communication-db
+    environment:
+      POSTGRES_DB: communication-db
+      POSTGRES_USER: communication
+      POSTGRES_PASSWORD: communication
+    volumes:
+      - communication_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U communication -d communication-db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   identity-db:
     image: postgres:15
@@ -73,21 +86,6 @@ services:
       timeout: 5s
       retries: 5
 
-  communication-db:
-    image: postgres:15
-    container_name: communication-db
-    environment:
-      POSTGRES_DB: communication-db
-      POSTGRES_USER: communication
-      POSTGRES_PASSWORD: communication
-    volumes:
-      - communication_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U communication -d communication-db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -97,6 +95,46 @@ services:
     restart: unless-stopped
 
     # ------ SERVICES ------
+
+  api-gateway:
+    container_name: api-gateway
+    build:
+      context: ../api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      GATEWAY_IDENTITY_URI: http://identity-service:8081
+      GATEWAY_MODERATION_URI: http://identity-service:8081
+      GATEWAY_MATCH_URI: http://match-service:8082
+      GATEWAY_NOTIFICATION_URI: http://notification-service:8083
+      GATEWAY_COMMUNICATION_URI: http://communication-service:8084
+      GATEWAY_COMMUNICATION_WS_URI: ws://communication-service:8084
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+    depends_on:
+      - identity-service
+      - match-service
+      - notification-service
+      - communication-service
+    restart: unless-stopped
+
+  communication-service:
+    container_name: communication-service
+    build:
+      context: ../communication-service
+    environment:
+      DB_URL: jdbc:postgresql://communication-db:5432/communication-db
+      DB_USERNAME: communication
+      DB_PASSWORD: communication
+      KAFKA_BOOTSTRAP_SERVERS: broker:9092
+      IDENTITY_JWKS_URI: http://identity-service:8081/oauth2/jwks
+      REDIS_URL: redis://redis:6379
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+    depends_on:
+      communication-db:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+    restart: unless-stopped
 
   identity-service:
     container_name: identity-service
@@ -156,61 +194,9 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  communication-service:
-    container_name: communication-service
-    build:
-      context: ../communication-service
-    environment:
-      DB_URL: jdbc:postgresql://communication-db:5432/communication-db
-      DB_USERNAME: communication
-      DB_PASSWORD: communication
-      KAFKA_BOOTSTRAP_SERVERS: broker:9092
-      IDENTITY_JWKS_URI: http://identity-service:8081/oauth2/jwks
-      REDIS_URL: redis://redis:6379
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-    depends_on:
-      communication-db:
-        condition: service_healthy
-      broker:
-        condition: service_healthy
-    restart: unless-stopped
-
-  api-gateway:
-    container_name: api-gateway
-    build:
-      context: ../api-gateway
-    ports:
-      - "8080:8080"
-    environment:
-      GATEWAY_IDENTITY_URI: http://identity-service:8081
-      GATEWAY_MODERATION_URI: http://identity-service:8081
-      GATEWAY_MATCH_URI: http://match-service:8082
-      GATEWAY_NOTIFICATION_URI: http://notification-service:8083
-      GATEWAY_COMMUNICATION_URI: http://communication-service:8084
-      GATEWAY_COMMUNICATION_WS_URI: ws://communication-service:8084
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-    depends_on:
-      - identity-service
-      - match-service
-      - notification-service
-      - communication-service
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.retention.time=7d
-    restart: unless-stopped
-
   # ------ UI -------
   # TODO: We might delete these
+
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: kafka-ui
@@ -222,26 +208,9 @@ services:
     depends_on:
       - broker
 
-  grafana:
-    image: grafana/grafana:latest
-    container_name: grafana
-    ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_USERS_ALLOW_SIGN_UP: false
-    volumes:
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-
 volumes:
   identity_data:
   match_data:
   notification_data:
   communication_data:
-  prometheus_data:
-  grafana_data:
   redis_data:
