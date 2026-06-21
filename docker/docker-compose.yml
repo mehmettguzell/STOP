@@ -31,14 +31,14 @@ services:
     image: postgres:15
     container_name: communication-db
     environment:
-      POSTGRES_DB: communication-db
-      POSTGRES_USER: communication
-      POSTGRES_PASSWORD: communication
+      POSTGRES_DB: ${COMMUNICATION_DB_NAME}
+      POSTGRES_USER: ${COMMUNICATION_DB_USER}
+      POSTGRES_PASSWORD: ${COMMUNICATION_DB_PASSWORD}
     volumes:
       - communication_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U communication -d communication-db"]
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -47,14 +47,14 @@ services:
     image: postgres:15
     container_name: identity-db
     environment:
-      POSTGRES_DB: identity-db
-      POSTGRES_USER: identity
-      POSTGRES_PASSWORD: identity
+      POSTGRES_DB: ${IDENTITY_DB_NAME}
+      POSTGRES_USER: ${IDENTITY_DB_USER}
+      POSTGRES_PASSWORD: ${IDENTITY_DB_PASSWORD}
     volumes:
       - identity_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U identity -d identity-db"]
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,14 +63,14 @@ services:
     image: postgres:15
     container_name: match-db
     environment:
-      POSTGRES_DB: match-db
-      POSTGRES_USER: match
-      POSTGRES_PASSWORD: match
+      POSTGRES_DB: ${MATCH_DB_NAME}
+      POSTGRES_USER: ${MATCH_DB_USER}
+      POSTGRES_PASSWORD: ${MATCH_DB_PASSWORD}
     volumes:
       - match_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U match -d match-db"]
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -79,14 +79,14 @@ services:
     image: postgres:15
     container_name: notification-db
     environment:
-      POSTGRES_DB: notification-db
-      POSTGRES_USER: notification
-      POSTGRES_PASSWORD: notification
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME}
+      POSTGRES_USER: ${NOTIFICATION_DB_USER}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
     volumes:
       - notification_data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U notification -d notification-db"]
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -108,92 +108,117 @@ services:
     ports:
       - "8080:8080"
     environment:
-      GATEWAY_IDENTITY_URI: http://identity-service:8081
-      GATEWAY_MODERATION_URI: http://identity-service:8081
-      GATEWAY_MATCH_URI: http://match-service:8082
-      GATEWAY_NOTIFICATION_URI: http://notification-service:8083
-      GATEWAY_COMMUNICATION_URI: http://communication-service:8084
-      GATEWAY_COMMUNICATION_WS_URI: ws://communication-service:8084
+      GATEWAY_IDENTITY_URI: ${GATEWAY_IDENTITY_URI}
+      GATEWAY_MODERATION_URI: ${GATEWAY_MODERATION_URI}
+      GATEWAY_MATCH_URI: ${GATEWAY_MATCH_URI}
+      GATEWAY_NOTIFICATION_URI: ${GATEWAY_NOTIFICATION_URI}
+      GATEWAY_COMMUNICATION_URI: ${GATEWAY_COMMUNICATION_URI}
+      GATEWAY_COMMUNICATION_WS_URI: ${GATEWAY_COMMUNICATION_WS_URI}
+
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+
     depends_on:
       - identity-service
       - match-service
       - notification-service
       - communication-service
+
     restart: unless-stopped
 
   communication-service:
     container_name: communication-service
     build:
       context: ../communication-service
+
     environment:
-      DB_URL: jdbc:postgresql://communication-db:5432/communication-db
-      DB_USERNAME: communication
-      DB_PASSWORD: communication
-      KAFKA_BOOTSTRAP_SERVERS: broker:9092
-      REDIS_URL: redis://redis:6379
+      DB_URL: ${COMMUNICATION_DB_URL}
+      DB_USERNAME: ${COMMUNICATION_DB_USER}
+      DB_PASSWORD: ${COMMUNICATION_DB_PASSWORD}
+
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_URL: ${REDIS_URL}
+
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+
     depends_on:
       communication-db:
         condition: service_healthy
       broker:
         condition: service_healthy
+
     restart: unless-stopped
 
   identity-service:
     container_name: identity-service
     build:
       context: ../identity-service
+
     environment:
-      DB_URL: jdbc:postgresql://identity-db:5432/identity-db
-      DB_USERNAME: identity
-      DB_PASSWORD: identity
-      REDIS_URL: redis://redis:6379
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: broker:9092
+      DB_URL: ${IDENTITY_DB_URL}
+      DB_USERNAME: ${IDENTITY_DB_USER}
+      DB_PASSWORD: ${IDENTITY_DB_PASSWORD}
+
+      REDIS_URL: ${REDIS_URL}
+
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+
     depends_on:
       identity-db:
         condition: service_healthy
       broker:
         condition: service_healthy
+
     restart: unless-stopped
 
   match-service:
     container_name: match-service
     build:
       context: ../match-service
+
     environment:
-      DB_URL: jdbc:postgresql://match-db:5432/match-db
-      DB_USERNAME: match
-      DB_PASSWORD: match
-      KAFKA_BOOTSTRAP_SERVERS: broker:9092
-      REDIS_URL: redis://redis:6379
+      DB_URL: ${MATCH_DB_URL}
+      DB_USERNAME: ${MATCH_DB_USER}
+      DB_PASSWORD: ${MATCH_DB_PASSWORD}
+
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_URL: ${REDIS_URL}
+
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+
     depends_on:
       match-db:
         condition: service_healthy
       broker:
         condition: service_healthy
+
     restart: unless-stopped
 
   notification-service:
     container_name: notification-service
     build:
       context: ../notification-service
+
     environment:
-      DB_URL: jdbc:postgresql://notification-db:5432/notification-db
-      DB_USERNAME: notification
-      DB_PASSWORD: notification
-      KAFKA_BOOTSTRAP_SERVERS: broker:9092
-      REDIS_URL: redis://redis:6379
-      MATCH_SERVICE_URL: http://match-service:8082/api/v1
+      DB_URL: ${NOTIFICATION_DB_URL}
+      DB_USERNAME: ${NOTIFICATION_DB_USER}
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_URL: ${REDIS_URL}
+
+      MATCH_SERVICE_URL: ${MATCH_SERVICE_URL}
+
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+
     depends_on:
       notification-db:
         condition: service_healthy
       broker:
         condition: service_healthy
+
     restart: unless-stopped
 
 volumes:
