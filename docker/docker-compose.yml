@@ -17,10 +17,46 @@ x-service-healthcheck: &service-healthcheck
   retries: 5
   start_period: 90s
 
+x-java-resources: &java-resources
+  deploy:
+    resources:
+      limits:
+        memory: 512m
+      reservations:
+        memory: 256m
+
+x-db-resources: &db-resources
+  deploy:
+    resources:
+      limits:
+        memory: 256m
+      reservations:
+        memory: 128m
+
+x-kafka-resources: &kafka-resources
+  deploy:
+    resources:
+      limits:
+        memory: 768m
+      reservations:
+        memory: 512m
+
+x-redis-resources: &redis-resources
+  deploy:
+    resources:
+      limits:
+        memory: 128m
+      reservations:
+        memory: 64m
+
 services:
+
+  # ------ INFRASTRUCTURE ------
+
   broker:
     image: apache/kafka:latest
     container_name: broker
+    <<: *kafka-resources
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -37,19 +73,27 @@ services:
     restart: unless-stopped
     logging: *default-logging
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list",
-        ]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
       interval: 15s
       timeout: 10s
       retries: 10
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    <<: *redis-resources
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ------ DATABASES ------
+
   communication-db:
     image: postgres:15
     container_name: communication-db
+    <<: *db-resources
     environment:
       POSTGRES_DB: ${COMMUNICATION_DB_NAME}
       POSTGRES_USER: ${COMMUNICATION_DB_USER}
@@ -63,6 +107,7 @@ services:
   identity-db:
     image: postgres:15
     container_name: identity-db
+    <<: *db-resources
     environment:
       POSTGRES_DB: ${IDENTITY_DB_NAME}
       POSTGRES_USER: ${IDENTITY_DB_USER}
@@ -76,6 +121,7 @@ services:
   match-db:
     image: postgres:15
     container_name: match-db
+    <<: *db-resources
     environment:
       POSTGRES_DB: ${MATCH_DB_NAME}
       POSTGRES_USER: ${MATCH_DB_USER}
@@ -89,6 +135,7 @@ services:
   notification-db:
     image: postgres:15
     container_name: notification-db
+    <<: *db-resources
     environment:
       POSTGRES_DB: ${NOTIFICATION_DB_NAME}
       POSTGRES_USER: ${NOTIFICATION_DB_USER}
@@ -99,57 +146,13 @@ services:
     logging: *default-logging
     healthcheck: *db-healthcheck
 
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-
-    volumes:
-      - redis_data:/data
-    restart: unless-stopped
-    logging: *default-logging
-
-    # ------ SERVICES ------
-
-  api-gateway:
-    container_name: api-gateway
-    build:
-      context: ../api-gateway
-    ports:
-      - "8080:8080"
-    environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
-
-      GATEWAY_IDENTITY_URI: ${GATEWAY_IDENTITY_URI}
-      GATEWAY_MODERATION_URI: ${GATEWAY_MODERATION_URI}
-      GATEWAY_MATCH_URI: ${GATEWAY_MATCH_URI}
-      GATEWAY_NOTIFICATION_URI: ${GATEWAY_NOTIFICATION_URI}
-      GATEWAY_COMMUNICATION_URI: ${GATEWAY_COMMUNICATION_URI}
-      GATEWAY_COMMUNICATION_WS_URI: ${GATEWAY_COMMUNICATION_WS_URI}
-
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-
-    depends_on:
-      identity-service:
-        condition: service_healthy
-      match-service:
-        condition: service_healthy
-      notification-service:
-        condition: service_healthy
-      communication-service:
-        condition: service_healthy
-
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8080/actuator/health || exit 1"]
-      <<: *service-healthcheck
-
-    restart: unless-stopped
-    logging: *default-logging
+  # ------ SERVICES ------
 
   communication-service:
     container_name: communication-service
     build:
       context: ../communication-service
-
+    <<: *java-resources
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
@@ -161,17 +164,14 @@ services:
       REDIS_URL: ${REDIS_URL}
 
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-
     depends_on:
       communication-db:
         condition: service_healthy
       broker:
         condition: service_healthy
-
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8084/actuator/health || exit 1"]
       <<: *service-healthcheck
-
     restart: unless-stopped
     logging: *default-logging
 
@@ -179,7 +179,7 @@ services:
     container_name: identity-service
     build:
       context: ../identity-service
-
+    <<: *java-resources
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
@@ -195,17 +195,14 @@ services:
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
 
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
-
     depends_on:
       identity-db:
         condition: service_healthy
       broker:
         condition: service_healthy
-
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8081/actuator/health || exit 1"]
       <<: *service-healthcheck
-
     restart: unless-stopped
     logging: *default-logging
 
@@ -213,7 +210,7 @@ services:
     container_name: match-service
     build:
       context: ../match-service
-
+    <<: *java-resources
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
@@ -225,17 +222,14 @@ services:
       REDIS_URL: ${REDIS_URL}
 
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-
     depends_on:
       match-db:
         condition: service_healthy
       broker:
         condition: service_healthy
-
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8082/actuator/health || exit 1"]
       <<: *service-healthcheck
-
     restart: unless-stopped
     logging: *default-logging
 
@@ -243,7 +237,7 @@ services:
     container_name: notification-service
     build:
       context: ../notification-service
-
+    <<: *java-resources
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
@@ -257,17 +251,49 @@ services:
       MATCH_SERVICE_URL: ${MATCH_SERVICE_URL}
 
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-
     depends_on:
       notification-db:
         condition: service_healthy
       broker:
         condition: service_healthy
-
     healthcheck:
       test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8083/actuator/health || exit 1"]
       <<: *service-healthcheck
+    restart: unless-stopped
+    logging: *default-logging
 
+  # ------ GATEWAY ------
+
+  api-gateway:
+    container_name: api-gateway
+    build:
+      context: ../api-gateway
+    <<: *java-resources
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
+      GATEWAY_IDENTITY_URI: ${GATEWAY_IDENTITY_URI}
+      GATEWAY_MODERATION_URI: ${GATEWAY_MODERATION_URI}
+      GATEWAY_MATCH_URI: ${GATEWAY_MATCH_URI}
+      GATEWAY_NOTIFICATION_URI: ${GATEWAY_NOTIFICATION_URI}
+      GATEWAY_COMMUNICATION_URI: ${GATEWAY_COMMUNICATION_URI}
+      GATEWAY_COMMUNICATION_WS_URI: ${GATEWAY_COMMUNICATION_WS_URI}
+
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
+    depends_on:
+      identity-service:
+        condition: service_healthy
+      match-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      communication-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8080/actuator/health || exit 1"]
+      <<: *service-healthcheck
     restart: unless-stopped
     logging: *default-logging
 
