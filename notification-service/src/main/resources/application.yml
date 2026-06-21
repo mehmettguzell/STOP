@@ -7,7 +7,7 @@ spring:
 
   data:
     redis:
-      url: ${REDIS_URL:redis://localhost:6379}
+      url: ${REDIS_URL}
       lettuce:
         command-timeout: 2s        # Redis 2s'de yanıt vermezse timeout → cache miss
         shutdown-timeout: 100ms
@@ -17,9 +17,9 @@ spring:
       time-to-live: 10m
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5435/notification-db}
-    username: ${DB_USERNAME:notification}
-    password: ${DB_PASSWORD:notification}
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -38,7 +38,7 @@ spring:
     connect-retries-interval: 5s
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     consumer:
       group-id: notification-service-group
       auto-offset-reset: earliest
@@ -47,9 +47,17 @@ spring:
       properties:
         spring.json.trusted.packages: "com.stop.*"
 
+notification:
+  cors:
+    allowed-origin-patterns:
+      - "http://localhost:*"
+      - "http://127.0.0.1:*"
+      - "http://10.0.2.2:*"
+      - "http://192.168.*:*"
+
 services:
   match-service:
-    base-url: ${MATCH_SERVICE_URL:http://localhost:8082/api/v1}
+    base-url: ${MATCH_SERVICE_URL}
 
 management:
   endpoints:

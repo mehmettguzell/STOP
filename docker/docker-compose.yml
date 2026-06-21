@@ -1,7 +1,62 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-db-healthcheck: &db-healthcheck
+  test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+  start_period: 30s
+
+x-service-healthcheck: &service-healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 90s
+
+x-java-resources: &java-resources
+  deploy:
+    resources:
+      limits:
+        memory: 512m
+      reservations:
+        memory: 256m
+
+x-db-resources: &db-resources
+  deploy:
+    resources:
+      limits:
+        memory: 256m
+      reservations:
+        memory: 128m
+
+x-kafka-resources: &kafka-resources
+  deploy:
+    resources:
+      limits:
+        memory: 768m
+      reservations:
+        memory: 512m
+
+x-redis-resources: &redis-resources
+  deploy:
+    resources:
+      limits:
+        memory: 128m
+      reservations:
+        memory: 64m
+
 services:
+
+  # ------ INFRASTRUCTURE ------
+
   broker:
     image: apache/kafka:latest
     container_name: broker
+    <<: *kafka-resources
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -15,195 +70,232 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_NUM_PARTITIONS: 3
+    restart: unless-stopped
+    logging: *default-logging
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list",
-        ]
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
       interval: 15s
       timeout: 10s
       retries: 10
       start_period: 30s
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    <<: *redis-resources
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    logging: *default-logging
+
+  # ------ DATABASES ------
+
   communication-db:
     image: postgres:15
     container_name: communication-db
+    <<: *db-resources
     environment:
-      POSTGRES_DB: communication-db
-      POSTGRES_USER: communication
-      POSTGRES_PASSWORD: communication
+      POSTGRES_DB: ${COMMUNICATION_DB_NAME}
+      POSTGRES_USER: ${COMMUNICATION_DB_USER}
+      POSTGRES_PASSWORD: ${COMMUNICATION_DB_PASSWORD}
     volumes:
       - communication_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U communication -d communication-db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck: *db-healthcheck
 
   identity-db:
     image: postgres:15
     container_name: identity-db
+    <<: *db-resources
     environment:
-      POSTGRES_DB: identity-db
-      POSTGRES_USER: identity
-      POSTGRES_PASSWORD: identity
+      POSTGRES_DB: ${IDENTITY_DB_NAME}
+      POSTGRES_USER: ${IDENTITY_DB_USER}
+      POSTGRES_PASSWORD: ${IDENTITY_DB_PASSWORD}
     volumes:
       - identity_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U identity -d identity-db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck: *db-healthcheck
 
   match-db:
     image: postgres:15
     container_name: match-db
+    <<: *db-resources
     environment:
-      POSTGRES_DB: match-db
-      POSTGRES_USER: match
-      POSTGRES_PASSWORD: match
+      POSTGRES_DB: ${MATCH_DB_NAME}
+      POSTGRES_USER: ${MATCH_DB_USER}
+      POSTGRES_PASSWORD: ${MATCH_DB_PASSWORD}
     volumes:
       - match_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U match -d match-db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    restart: unless-stopped
+    logging: *default-logging
+    healthcheck: *db-healthcheck
 
   notification-db:
     image: postgres:15
     container_name: notification-db
+    <<: *db-resources
     environment:
-      POSTGRES_DB: notification-db
-      POSTGRES_USER: notification
-      POSTGRES_PASSWORD: notification
+      POSTGRES_DB: ${NOTIFICATION_DB_NAME}
+      POSTGRES_USER: ${NOTIFICATION_DB_USER}
+      POSTGRES_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
     volumes:
       - notification_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U notification -d notification-db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: redis
-
-    volumes:
-      - redis_data:/data
     restart: unless-stopped
+    logging: *default-logging
+    healthcheck: *db-healthcheck
 
-    # ------ SERVICES ------
-
-  api-gateway:
-    container_name: api-gateway
-    build:
-      context: ../api-gateway
-    ports:
-      - "8080:8080"
-    environment:
-      GATEWAY_IDENTITY_URI: http://identity-service:8081
-      GATEWAY_MODERATION_URI: http://identity-service:8081
-      GATEWAY_MATCH_URI: http://match-service:8082
-      GATEWAY_NOTIFICATION_URI: http://notification-service:8083
-      GATEWAY_COMMUNICATION_URI: http://communication-service:8084
-      GATEWAY_COMMUNICATION_WS_URI: ws://communication-service:8084
-      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
-    depends_on:
-      - identity-service
-      - match-service
-      - notification-service
-      - communication-service
-    restart: unless-stopped
+  # ------ SERVICES ------
 
   communication-service:
     container_name: communication-service
     build:
       context: ../communication-service
+    <<: *java-resources
     environment:
-      DB_URL: jdbc:postgresql://communication-db:5432/communication-db
-      DB_USERNAME: communication
-      DB_PASSWORD: communication
-      KAFKA_BOOTSTRAP_SERVERS: broker:9092
-      REDIS_URL: redis://redis:6379
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
+      DB_URL: ${COMMUNICATION_DB_URL}
+      DB_USERNAME: ${COMMUNICATION_DB_USER}
+      DB_PASSWORD: ${COMMUNICATION_DB_PASSWORD}
+
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_URL: ${REDIS_URL}
+
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
     depends_on:
       communication-db:
         condition: service_healthy
       broker:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8084/actuator/health || exit 1"]
+      <<: *service-healthcheck
     restart: unless-stopped
+    logging: *default-logging
 
   identity-service:
     container_name: identity-service
     build:
       context: ../identity-service
+    <<: *java-resources
     environment:
-      DB_URL: jdbc:postgresql://identity-db:5432/identity-db
-      DB_USERNAME: identity
-      DB_PASSWORD: identity
-      REDIS_URL: redis://redis:6379
-      SPRING_KAFKA_BOOTSTRAP_SERVERS: broker:9092
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
+      DB_URL: ${IDENTITY_DB_URL}
+      DB_USERNAME: ${IDENTITY_DB_USER}
+      DB_PASSWORD: ${IDENTITY_DB_PASSWORD}
+
+      REDIS_URL: ${REDIS_URL}
+
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
+
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
     depends_on:
       identity-db:
         condition: service_healthy
       broker:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8081/actuator/health || exit 1"]
+      <<: *service-healthcheck
     restart: unless-stopped
+    logging: *default-logging
 
   match-service:
     container_name: match-service
     build:
       context: ../match-service
+    <<: *java-resources
     environment:
-      DB_URL: jdbc:postgresql://match-db:5432/match-db
-      DB_USERNAME: match
-      DB_PASSWORD: match
-      KAFKA_BOOTSTRAP_SERVERS: broker:9092
-      REDIS_URL: redis://redis:6379
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
+      DB_URL: ${MATCH_DB_URL}
+      DB_USERNAME: ${MATCH_DB_USER}
+      DB_PASSWORD: ${MATCH_DB_PASSWORD}
+
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_URL: ${REDIS_URL}
+
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
     depends_on:
       match-db:
         condition: service_healthy
       broker:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8082/actuator/health || exit 1"]
+      <<: *service-healthcheck
     restart: unless-stopped
+    logging: *default-logging
 
   notification-service:
     container_name: notification-service
     build:
       context: ../notification-service
+    <<: *java-resources
     environment:
-      DB_URL: jdbc:postgresql://notification-db:5432/notification-db
-      DB_USERNAME: notification
-      DB_PASSWORD: notification
-      KAFKA_BOOTSTRAP_SERVERS: broker:9092
-      REDIS_URL: redis://redis:6379
-      MATCH_SERVICE_URL: http://match-service:8082/api/v1
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
+      DB_URL: ${NOTIFICATION_DB_URL}
+      DB_USERNAME: ${NOTIFICATION_DB_USER}
+      DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
+
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}
+      REDIS_URL: ${REDIS_URL}
+
+      MATCH_SERVICE_URL: ${MATCH_SERVICE_URL}
+
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
     depends_on:
       notification-db:
         condition: service_healthy
       broker:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8083/actuator/health || exit 1"]
+      <<: *service-healthcheck
     restart: unless-stopped
+    logging: *default-logging
 
-  # ------ UI -------
-  # TODO: We might delete these
+  # ------ GATEWAY ------
 
-  kafka-ui:
-    image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
+  api-gateway:
+    container_name: api-gateway
+    build:
+      context: ../api-gateway
+    <<: *java-resources
     ports:
-      - "8090:8080"
+      - "8080:8080"
     environment:
-      KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker:9092
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
+      GATEWAY_IDENTITY_URI: ${GATEWAY_IDENTITY_URI}
+      GATEWAY_MODERATION_URI: ${GATEWAY_MODERATION_URI}
+      GATEWAY_MATCH_URI: ${GATEWAY_MATCH_URI}
+      GATEWAY_NOTIFICATION_URI: ${GATEWAY_NOTIFICATION_URI}
+      GATEWAY_COMMUNICATION_URI: ${GATEWAY_COMMUNICATION_URI}
+      GATEWAY_COMMUNICATION_WS_URI: ${GATEWAY_COMMUNICATION_WS_URI}
+
+      JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
     depends_on:
-      - broker
+      identity-service:
+        condition: service_healthy
+      match-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      communication-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8080/actuator/health || exit 1"]
+      <<: *service-healthcheck
+    restart: unless-stopped
+    logging: *default-logging
 
 volumes:
   identity_data:

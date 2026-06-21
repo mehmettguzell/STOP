@@ -12,9 +12,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializationContext;
-import org.springframework.data.redis.serializer.RedisSerializer;
-import org.springframework.data.redis.serializer.SerializationException;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.lang.NonNull;
 
 import java.time.Duration;
@@ -25,35 +25,21 @@ public class CacheConfig implements CachingConfigurer {
 
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory connectionFactory) {
-        ObjectMapper objectMapper = new ObjectMapper()
-                .findAndRegisterModules()
-                .activateDefaultTyping(
-                        BasicPolymorphicTypeValidator.builder()
-                                .allowIfBaseType(Object.class)
-                                .build(),
-                        ObjectMapper.DefaultTyping.EVERYTHING
-                );
-
-        RedisSerializer<Object> jsonSerializer = new RedisSerializer<>() {
-            @Override
-            public byte[] serialize(Object value) throws SerializationException {
-                if (value == null) return null;
-                try { return objectMapper.writeValueAsBytes(value); }
-                catch (Exception e) { throw new SerializationException("Serialize error", e); }
-            }
-
-            @Override
-            public Object deserialize(byte[] bytes) throws SerializationException {
-                if (bytes == null) return null;
-                try { return objectMapper.readValue(bytes, Object.class); }
-                catch (Exception e) { throw new SerializationException("Deserialize error", e); }
-            }
-        };
+        ObjectMapper cacheMapper = new ObjectMapper().findAndRegisterModules();
+        cacheMapper.activateDefaultTyping(
+                BasicPolymorphicTypeValidator.builder()
+                        .allowIfSubType("com.stop.notification_service.")
+                        .allowIfSubType(java.util.ArrayList.class)
+                        .build(),
+                ObjectMapper.DefaultTyping.NON_FINAL
+        );
 
         RedisCacheConfiguration config = RedisCacheConfiguration.defaultCacheConfig()
                 .entryTtl(Duration.ofMinutes(10))
+                .disableCachingNullValues()
+                .serializeKeysWith(RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(
-                        RedisSerializationContext.SerializationPair.fromSerializer(jsonSerializer)
+                        RedisSerializationContext.SerializationPair.fromSerializer(new GenericJackson2JsonRedisSerializer(cacheMapper))
                 );
 
         return RedisCacheManager.builder(connectionFactory)
@@ -61,10 +47,6 @@ public class CacheConfig implements CachingConfigurer {
                 .build();
     }
 
-    /**
-     * Redis düşse bile servis çalışmaya devam eder — cache miss olarak işlem görür,
-     * 500 hatası fırlatmaz ve circuit breaker'ı tetiklemez.
-     */
     @Override
     @NonNull
     public CacheErrorHandler errorHandler() {

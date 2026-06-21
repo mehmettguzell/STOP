@@ -1,3 +1,43 @@
+match:
+  cors:
+    allowed-origin-patterns:
+      - "http://localhost:*"
+      - "http://127.0.0.1:*"
+      - "http://10.0.2.2:*"
+      - "http://192.168.*:*"
+
+  tracing:
+    enabled: false
+
+logging:
+  file:
+    name: logs/match-service.log
+  level:
+    root: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    level: "%5p [match-service]"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 server:
   port: ${MATCH_PORT:8082}
 
@@ -6,9 +46,9 @@ spring:
     name: match-service
 
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5433/match-db}
-    username: ${DB_USERNAME:match}
-    password: ${DB_PASSWORD:match}
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
@@ -31,7 +71,7 @@ spring:
       pageable:
         max-page-size: 100
     redis:
-      url: ${REDIS_URL:redis://localhost:6379}
+      url: ${REDIS_URL}
   cache:
     type: redis
     redis:
@@ -39,31 +79,12 @@ spring:
 
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     consumer:
       group-id: match-service
       auto-offset-reset: earliest
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus,metrics
-  endpoint:
-    health:
-      show-details: when_authorized
-      probes:
-        enabled: true
-  health:
-    livenessstate:
-      enabled: true
-    readinessstate:
-      enabled: true
-  metrics:
-    tags:
-      application: ${spring.application.name}
 
 springdoc:
   api-docs:
@@ -73,12 +94,3 @@ springdoc:
     operations-sorter: method
     persistAuthorization: true
 
-logging:
-  file:
-    name: logs/match-service.log
-  level:
-    root: INFO
-    org.springframework.security: WARN
-    org.hibernate.SQL: WARN
-  pattern:
-    level: "%5p [match-service]"

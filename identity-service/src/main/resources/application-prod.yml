@@ -1,0 +1,20 @@
+identity:
+  cors:
+    allowed-origin-patterns:
+      - "${ALLOWED_ORIGIN}"
+  tracing:
+    enabled: true
+
+logging:
+  file:
+    name: ""
+  level:
+    root: WARN
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
