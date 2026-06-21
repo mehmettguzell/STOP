@@ -1,57 +1,3 @@
-server:
-  port: ${IDENTITY_PORT:8081}
-
-spring:
-  application:
-    name: identity-service
-
-  datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/identity-db}
-    username: ${DB_USERNAME:identity}
-    password: ${DB_PASSWORD:identity}
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 2
-      connection-timeout: 5000
-      initialization-fail-timeout: -1
-      leak-detection-threshold: 10000
-      keepalive-time: 300000
-
-  jpa:
-    hibernate:
-      ddl-auto: validate
-
-  flyway:
-    enabled: true
-    connect-retries: 10
-    connect-retries-interval: 5s
-
-  data:
-    web:
-      pageable:
-        max-page-size: 100
-    redis:
-      url: ${REDIS_URL:redis://localhost:6379}
-
-  cache:
-    type: redis
-    redis:
-      time-to-live: 10m
-
-  kafka:
-    bootstrap-servers: localhost:9093
-    consumer:
-      group-id: identity-service-group
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      properties:
-        spring.json.add.type.headers: false
-
 identity:
   cors:
     allowed-origin-patterns:
@@ -62,6 +8,16 @@ identity:
 
   tracing:
     enabled: false
+
+logging:
+  file:
+    name: logs/identity-service.log
+  level:
+    root: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    level: "%5p [identity-service]"
 
 management:
   endpoints:
@@ -82,6 +38,60 @@ management:
     tags:
       application: ${spring.application.name}
 
+server:
+  port: ${IDENTITY_PORT:8081}
+
+spring:
+  application:
+    name: identity-service
+
+  cache:
+    type: redis
+    redis:
+      time-to-live: 10m
+
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+    redis:
+      url: ${REDIS_URL}
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 5000
+      initialization-fail-timeout: -1
+      leak-detection-threshold: 10000
+      keepalive-time: 300000
+
+  flyway:
+    enabled: true
+    connect-retries: 10
+    connect-retries-interval: 5s
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: identity-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+
 springdoc:
   api-docs:
     path: /v3/api-docs
@@ -89,13 +99,3 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
     persistAuthorization: true
-
-logging:
-  file:
-    name: logs/identity-service.log
-  level:
-    root: INFO
-    org.springframework.security: WARN
-    org.hibernate.SQL: WARN
-  pattern:
-    level: "%5p [identity-service]"

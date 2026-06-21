@@ -1,7 +1,5 @@
 package com.stop.identity_service.config;
 
-import com.fasterxml.jackson.annotation.JsonAutoDetect;
-import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +27,7 @@ public class CacheConfig implements CachingConfigurer {
         ObjectMapper cacheMapper = new ObjectMapper().findAndRegisterModules();
         cacheMapper.activateDefaultTyping(
                 BasicPolymorphicTypeValidator.builder()
-                        .allowIfSubType(Object.class)
+                        .allowIfSubType("com.stop.identity_service.")
                         .build(),
                 ObjectMapper.DefaultTyping.NON_FINAL
         );

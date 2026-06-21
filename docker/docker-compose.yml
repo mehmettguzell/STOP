@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   broker:
     image: apache/kafka:latest
@@ -16,6 +22,7 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_NUM_PARTITIONS: 3
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test:
         [
@@ -37,6 +44,7 @@ services:
     volumes:
       - communication_data:/var/lib/postgresql/data
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
@@ -53,6 +61,7 @@ services:
     volumes:
       - identity_data:/var/lib/postgresql/data
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
@@ -69,6 +78,7 @@ services:
     volumes:
       - match_data:/var/lib/postgresql/data
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
@@ -85,6 +95,7 @@ services:
     volumes:
       - notification_data:/var/lib/postgresql/data
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
       interval: 10s
@@ -98,6 +109,7 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    logging: *default-logging
 
     # ------ SERVICES ------
 
@@ -124,6 +136,7 @@ services:
       - communication-service
 
     restart: unless-stopped
+    logging: *default-logging
 
   communication-service:
     container_name: communication-service
@@ -147,6 +160,7 @@ services:
         condition: service_healthy
 
     restart: unless-stopped
+    logging: *default-logging
 
   identity-service:
     container_name: identity-service
@@ -154,6 +168,8 @@ services:
       context: ../identity-service
 
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
       DB_URL: ${IDENTITY_DB_URL}
       DB_USERNAME: ${IDENTITY_DB_USER}
       DB_PASSWORD: ${IDENTITY_DB_PASSWORD}
@@ -165,6 +181,8 @@ services:
       JWT_PUBLIC_KEY: ${JWT_PUBLIC_KEY}
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
 
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
+
     depends_on:
       identity-db:
         condition: service_healthy
@@ -172,6 +190,7 @@ services:
         condition: service_healthy
 
     restart: unless-stopped
+    logging: *default-logging
 
   match-service:
     container_name: match-service
@@ -195,6 +214,7 @@ services:
         condition: service_healthy
 
     restart: unless-stopped
+    logging: *default-logging
 
   notification-service:
     container_name: notification-service
@@ -220,6 +240,7 @@ services:
         condition: service_healthy
 
     restart: unless-stopped
+    logging: *default-logging
 
 volumes:
   identity_data:
