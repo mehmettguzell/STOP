@@ -139,22 +139,21 @@ gateway:
     refill-period: ${GATEWAY_RATE_LIMIT_PERIOD:1m}
 
   services:
-    auth: ${GATEWAY_IDENTITY_URI:http://localhost:8081}
-    identity: ${GATEWAY_IDENTITY_URI:http://localhost:8081}
-    trustAndRank: ${GATEWAY_IDENTITY_URI:http://localhost:8081}
-    friendship: ${GATEWAY_IDENTITY_URI:http://localhost:8081}
-    moderation: ${GATEWAY_MODERATION_URI:http://localhost:8081}
+    auth: ${GATEWAY_IDENTITY_URI}
+    identity: ${GATEWAY_IDENTITY_URI}
+    trustAndRank: ${GATEWAY_IDENTITY_URI}
+    friendship: ${GATEWAY_IDENTITY_URI}
+    moderation: ${GATEWAY_MODERATION_URI}
 
+    match: ${GATEWAY_MATCH_URI}
+    participation: ${GATEWAY_MATCH_URI}
+    invitation: ${GATEWAY_MATCH_URI}
 
-    match: ${GATEWAY_MATCH_URI:http://localhost:8082}
-    participation: ${GATEWAY_MATCH_URI:http://localhost:8082}
-    invitation: ${GATEWAY_MATCH_URI:http://localhost:8082}
+    notification: ${GATEWAY_NOTIFICATION_URI}
+    communication: ${GATEWAY_COMMUNICATION_URI}
+    communication-ws: ${GATEWAY_COMMUNICATION_WS_URI}
 
-    notification: ${GATEWAY_NOTIFICATION_URI:http://localhost:8083}
-    communication: ${GATEWAY_COMMUNICATION_URI:http://localhost:8084}
-    communication-ws: ${GATEWAY_COMMUNICATION_WS_URI:ws://localhost:8084}
-
-    frontend: ${GATEWAY_FRONTEND_URI:http://localhost:8091}
+    frontend: ${GATEWAY_FRONTEND_URI}
 
 resilience4j:
   circuitbreaker:

@@ -120,6 +120,8 @@ services:
     ports:
       - "8080:8080"
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
       GATEWAY_IDENTITY_URI: ${GATEWAY_IDENTITY_URI}
       GATEWAY_MODERATION_URI: ${GATEWAY_MODERATION_URI}
       GATEWAY_MATCH_URI: ${GATEWAY_MATCH_URI}
@@ -144,6 +146,8 @@ services:
       context: ../communication-service
 
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
       DB_URL: ${COMMUNICATION_DB_URL}
       DB_USERNAME: ${COMMUNICATION_DB_USER}
       DB_PASSWORD: ${COMMUNICATION_DB_PASSWORD}
@@ -198,6 +202,8 @@ services:
       context: ../match-service
 
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
       DB_URL: ${MATCH_DB_URL}
       DB_USERNAME: ${MATCH_DB_USER}
       DB_PASSWORD: ${MATCH_DB_PASSWORD}
@@ -222,6 +228,8 @@ services:
       context: ../notification-service
 
     environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+
       DB_URL: ${NOTIFICATION_DB_URL}
       DB_USERNAME: ${NOTIFICATION_DB_USER}
       DB_PASSWORD: ${NOTIFICATION_DB_PASSWORD}
