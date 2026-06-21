@@ -54,7 +54,7 @@ services:
   # ------ INFRASTRUCTURE ------
 
   broker:
-    image: apache/kafka:latest
+    image: apache/kafka:4.2.0
     container_name: broker
     <<: *kafka-resources
     environment:
