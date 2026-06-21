@@ -80,10 +80,7 @@ public class GatewaySecurityConfig {
                 "http://10.0.2.2:*",
                 "http://192.168.*:*",
                 "http://13.53.196.26*",
-                "ws://13.53.196.26*",
-                "https://stophalisaha.duckdns.org*",
-                "wss://stophalisaha.duckdns.org*",
-                "*"
+                "https://stophalisaha.duckdns.org"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));

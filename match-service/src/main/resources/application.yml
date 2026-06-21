@@ -5,14 +5,6 @@ spring:
   application:
     name: match-service
 
-  security:
-    jwt:
-      public-key: classpath:keys/public.pem
-    oauth2:
-      resourceserver:
-        jwt:
-          jwk-set-uri: ${IDENTITY_JWKS_URI:http://localhost:8081/oauth2/jwks}
-
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5433/match-db}
     username: ${DB_USERNAME:match}
