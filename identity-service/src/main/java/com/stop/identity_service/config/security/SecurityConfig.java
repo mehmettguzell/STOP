@@ -73,12 +73,16 @@ public class SecurityConfig {
                                 "/api/v1/auth/forgot-password",
                                 "/api/v1/auth/reset-password",
                                 "/oauth2/jwks",
-                                "/actuator/**",
+                                "/actuator/health",
+                                "/actuator/health/liveness",
+                                "/actuator/health/readiness",
                                 "/v3/api-docs",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/swagger-ui.html"
                         ).permitAll()
+
+                        .requestMatchers("/actuator/**").hasRole("ADMIN")
 
                         .requestMatchers(
                                 org.springframework.http.HttpMethod.GET,
