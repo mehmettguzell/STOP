@@ -5,7 +5,7 @@ x-logging: &default-logging
     max-file: "5"
 
 x-db-healthcheck: &db-healthcheck
-  test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+  test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
   interval: 10s
   timeout: 5s
   retries: 5
