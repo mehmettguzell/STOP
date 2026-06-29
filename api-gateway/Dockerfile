@@ -1,9 +1,11 @@
 FROM maven:3.9.16-eclipse-temurin-21-noble AS build
 WORKDIR /app
 COPY pom.xml .
-RUN mvn dependency:go-offline
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn dependency:go-offline
 COPY src ./src
-RUN mvn package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 \
+    mvn package -DskipTests
 
 
 FROM eclipse-temurin:21.0.11_10-jre-alpine-3.23
