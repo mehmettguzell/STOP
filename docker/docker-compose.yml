@@ -11,6 +11,12 @@ x-db-healthcheck: &db-healthcheck
   retries: 5
   start_period: 30s
 
+x-redis-healthcheck: &redis-healthcheck
+  test: ["CMD", "redis-cli", "ping"]
+  interval: 10s
+  timeout: 5s
+  retries: 5
+
 x-service-healthcheck: &service-healthcheck
   interval: 30s
   timeout: 10s
@@ -49,14 +55,27 @@ x-redis-resources: &redis-resources
       reservations:
         memory: 64m
 
+x-broker-and-redis-depends-on: &redis-broker-depends-on
+  broker:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+networks:
+  backend:
+  identity-db-net:
+  match-db-net:
+  communication-db-net:
+  notification-db-net:
+
 services:
-
   # ------ INFRASTRUCTURE ------
-
   broker:
     image: apache/kafka:4.2.0
     container_name: broker
     <<: *kafka-resources
+    networks:
+      - backend
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -73,7 +92,11 @@ services:
     restart: unless-stopped
     logging: *default-logging
     healthcheck:
-      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list",
+        ]
       interval: 15s
       timeout: 10s
       retries: 10
@@ -83,10 +106,13 @@ services:
     image: redis:7-alpine
     container_name: redis
     <<: *redis-resources
+    networks:
+      - backend
     volumes:
       - redis_data:/data
     restart: unless-stopped
     logging: *default-logging
+    healthcheck: *redis-healthcheck
 
   # ------ DATABASES ------
 
@@ -94,6 +120,8 @@ services:
     image: postgres:15
     container_name: communication-db
     <<: *db-resources
+    networks:
+      - communication-db-net
     environment:
       POSTGRES_DB: ${COMMUNICATION_DB_NAME}
       POSTGRES_USER: ${COMMUNICATION_DB_USER}
@@ -108,6 +136,8 @@ services:
     image: postgres:15
     container_name: identity-db
     <<: *db-resources
+    networks:
+      - identity-db-net
     environment:
       POSTGRES_DB: ${IDENTITY_DB_NAME}
       POSTGRES_USER: ${IDENTITY_DB_USER}
@@ -122,6 +152,8 @@ services:
     image: postgres:15
     container_name: match-db
     <<: *db-resources
+    networks:
+      - match-db-net
     environment:
       POSTGRES_DB: ${MATCH_DB_NAME}
       POSTGRES_USER: ${MATCH_DB_USER}
@@ -136,6 +168,8 @@ services:
     image: postgres:15
     container_name: notification-db
     <<: *db-resources
+    networks:
+      - notification-db-net
     environment:
       POSTGRES_DB: ${NOTIFICATION_DB_NAME}
       POSTGRES_USER: ${NOTIFICATION_DB_USER}
@@ -153,6 +187,9 @@ services:
     build:
       context: ../communication-service
     <<: *java-resources
+    networks:
+      - backend
+      - communication-db-net
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
@@ -167,10 +204,13 @@ services:
     depends_on:
       communication-db:
         condition: service_healthy
-      broker:
-        condition: service_healthy
+      <<: *redis-broker-depends-on
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8084/actuator/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO /dev/null http://localhost:8084/actuator/health || exit 1",
+        ]
       <<: *service-healthcheck
     restart: unless-stopped
     logging: *default-logging
@@ -180,6 +220,9 @@ services:
     build:
       context: ../identity-service
     <<: *java-resources
+    networks:
+      - backend
+      - identity-db-net
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
@@ -198,10 +241,13 @@ services:
     depends_on:
       identity-db:
         condition: service_healthy
-      broker:
-        condition: service_healthy
+      <<: *redis-broker-depends-on
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8081/actuator/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO /dev/null http://localhost:8081/actuator/health || exit 1",
+        ]
       <<: *service-healthcheck
     restart: unless-stopped
     logging: *default-logging
@@ -211,6 +257,9 @@ services:
     build:
       context: ../match-service
     <<: *java-resources
+    networks:
+      - backend
+      - match-db-net
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
@@ -225,10 +274,13 @@ services:
     depends_on:
       match-db:
         condition: service_healthy
-      broker:
-        condition: service_healthy
+      <<: *redis-broker-depends-on
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8082/actuator/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO /dev/null http://localhost:8082/actuator/health || exit 1",
+        ]
       <<: *service-healthcheck
     restart: unless-stopped
     logging: *default-logging
@@ -238,6 +290,9 @@ services:
     build:
       context: ../notification-service
     <<: *java-resources
+    networks:
+      - backend
+      - notification-db-net
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
@@ -254,10 +309,13 @@ services:
     depends_on:
       notification-db:
         condition: service_healthy
-      broker:
-        condition: service_healthy
+      <<: *redis-broker-depends-on
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8083/actuator/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO /dev/null http://localhost:8083/actuator/health || exit 1",
+        ]
       <<: *service-healthcheck
     restart: unless-stopped
     logging: *default-logging
@@ -269,6 +327,8 @@ services:
     build:
       context: ../api-gateway
     <<: *java-resources
+    networks:
+      - backend
     ports:
       - "8080:8080"
     environment:
@@ -292,7 +352,11 @@ services:
       communication-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8080/actuator/health || exit 1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -qO /dev/null http://localhost:8080/actuator/health || exit 1",
+        ]
       <<: *service-healthcheck
     restart: unless-stopped
     logging: *default-logging
