@@ -10,8 +10,6 @@ springdoc:
     enabled: false
 
 logging:
-  file:
-    name: ""
   level:
     root: WARN
     org.springframework.security: WARN

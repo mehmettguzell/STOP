@@ -87,8 +87,6 @@ springdoc:
     persistAuthorization: true
 
 logging:
-  file:
-    name: logs/notification-service.log
   level:
     root: INFO
     org.springframework.security: WARN

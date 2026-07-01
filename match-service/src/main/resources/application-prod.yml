@@ -12,8 +12,6 @@ match:
     enabled: true
 
 logging:
-  file:
-    name: ""
   level:
     root: WARN
     org.springframework.security: WARN

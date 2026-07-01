@@ -10,8 +10,6 @@ identity:
     enabled: false
 
 logging:
-  file:
-    name: logs/identity-service.log
   level:
     root: INFO
     org.springframework.security: WARN

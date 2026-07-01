@@ -214,8 +214,6 @@ management:
       application: ${spring.application.name}
 
 logging:
-  file:
-    name: logs/api-gateway.log
   level:
     root: INFO
     org.springframework.security: WARN

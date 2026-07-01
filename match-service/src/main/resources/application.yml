@@ -10,8 +10,6 @@ match:
     enabled: false
 
 logging:
-  file:
-    name: logs/match-service.log
   level:
     root: INFO
     org.springframework.security: WARN
