@@ -123,10 +123,18 @@ jobs:
 
       - name: Smoke-boot api-gateway (no downstream dependencies in this job)
         if: matrix.service == 'api-gateway'
-        working-directory: docker
         run: |
           IMAGE="${{ env.GHCR_REGISTRY }}/stop/api-gateway:${{ github.sha }}"
-          docker run -d --name gw-smoke --env-file .env "$IMAGE"
+          docker run -d --name gw-smoke \
+            -e SPRING_PROFILES_ACTIVE=prod \
+            -e JWT_PUBLIC_KEY="$(cat /tmp/ci-public.pem)" \
+            -e GATEWAY_IDENTITY_URI=http://identity-service:8081 \
+            -e GATEWAY_MODERATION_URI=http://identity-service:8081 \
+            -e GATEWAY_MATCH_URI=http://match-service:8082 \
+            -e GATEWAY_NOTIFICATION_URI=http://notification-service:8083 \
+            -e GATEWAY_COMMUNICATION_URI=http://communication-service:8084 \
+            -e GATEWAY_COMMUNICATION_WS_URI=ws://communication-service:8084 \
+            "$IMAGE"
           sleep 20
           docker logs gw-smoke | tail -50
           docker inspect -f '{{.State.Running}}' gw-smoke | grep -q true
@@ -139,3 +147,25 @@ jobs:
       - name: Push latest tag (only after healthcheck passes)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: docker push "${{ env.GHCR_REGISTRY }}/stop/${{ matrix.service }}:latest"
+
+  notify-deploy:
+    needs: [changes, build]
+    # Only fires when this push actually rebuilt at least one service and
+    # every matrix leg succeeded — a workflow run that did nothing (e.g. a
+    # push that only touched a workflow file) never reaches this job, so it
+    # can never trigger a deploy. This is what deploy.yml listens for instead
+    # of the Build workflow's overall completion, which also fires (harmlessly
+    # but confusingly) on those no-op runs.
+    if: >
+      needs.changes.outputs.services != '[]' &&
+      needs.build.result == 'success' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch deploy event
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: deploy
+          client-payload: '{"sha": "${{ github.sha }}"}'

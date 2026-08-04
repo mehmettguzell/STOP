@@ -1,10 +1,8 @@
 name: Deploy
 
 on:
-  workflow_run:
-    workflows: ["Build"]
-    types: [completed]
-    branches: [main]
+  repository_dispatch:
+    types: [deploy]
 
 concurrency:
   group: deploy-production
@@ -19,12 +17,11 @@ env:
 
 jobs:
   deploy:
-    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.client_payload.sha }}
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -34,7 +31,7 @@ jobs:
 
       - name: Deploy via SSM (no git, no SSH on the server)
         env:
-          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
+          DEPLOY_SHA: ${{ github.event.client_payload.sha }}
           INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
         run: |
           set -euo pipefail
