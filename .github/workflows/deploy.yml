@@ -49,6 +49,62 @@ jobs:
           aws ecr get-login-password --region "\$REGION" | \
             docker login --username AWS --password-stdin "\$ECR_REGISTRY"
 
+          command -v jq >/dev/null 2>&1 || (apt-get update -y && apt-get install -y jq)
+
+          get_secret() {
+            aws secretsmanager get-secret-value --region "\$REGION" --secret-id "\$1" \
+              --query SecretString --output text
+          }
+
+          IDENTITY_DB_PASSWORD=\$(get_secret stop/prod/identity-db | jq -r .password)
+          MATCH_DB_PASSWORD=\$(get_secret stop/prod/match-db | jq -r .password)
+          COMMUNICATION_DB_PASSWORD=\$(get_secret stop/prod/communication-db | jq -r .password)
+          NOTIFICATION_DB_PASSWORD=\$(get_secret stop/prod/notification-db | jq -r .password)
+          JWT_PUBLIC_KEY=\$(get_secret stop/prod/jwt-keys | jq -r .public)
+          JWT_PRIVATE_KEY=\$(get_secret stop/prod/jwt-keys | jq -r .private)
+
+          cat > docker/.env <<ENVEOF
+          SPRING_PROFILES_ACTIVE=prod
+          ALLOWED_ORIGIN=https://stophalisaha.duckdns.org
+
+          COMMUNICATION_DB_NAME=communication_db
+          COMMUNICATION_DB_USER=communication_user
+          COMMUNICATION_DB_PASSWORD=\$COMMUNICATION_DB_PASSWORD
+          COMMUNICATION_DB_URL=jdbc:postgresql://communication-db:5432/communication_db
+
+          IDENTITY_DB_NAME=identity_db
+          IDENTITY_DB_USER=identity_user
+          IDENTITY_DB_PASSWORD=\$IDENTITY_DB_PASSWORD
+          IDENTITY_DB_URL=jdbc:postgresql://identity-db:5432/identity_db
+
+          MATCH_DB_NAME=match_db
+          MATCH_DB_USER=match_user
+          MATCH_DB_PASSWORD=\$MATCH_DB_PASSWORD
+          MATCH_DB_URL=jdbc:postgresql://match-db:5432/match_db
+
+          NOTIFICATION_DB_NAME=notification_db
+          NOTIFICATION_DB_USER=notification_user
+          NOTIFICATION_DB_PASSWORD=\$NOTIFICATION_DB_PASSWORD
+          NOTIFICATION_DB_URL=jdbc:postgresql://notification-db:5432/notification_db
+
+          KAFKA_BOOTSTRAP_SERVERS=broker:9092
+          REDIS_URL=redis://redis:6379
+          MATCH_SERVICE_URL=http://match-service:8082/api/v1
+
+          GATEWAY_IDENTITY_URI=http://identity-service:8081
+          GATEWAY_MODERATION_URI=http://identity-service:8081
+          GATEWAY_MATCH_URI=http://match-service:8082
+          GATEWAY_NOTIFICATION_URI=http://notification-service:8083
+          GATEWAY_COMMUNICATION_URI=http://communication-service:8084
+          GATEWAY_COMMUNICATION_WS_URI=ws://communication-service:8084
+
+          JWT_PUBLIC_KEY="\$JWT_PUBLIC_KEY"
+          JWT_PRIVATE_KEY="\$JWT_PRIVATE_KEY"
+
+          ECR_REGISTRY=\$ECR_REGISTRY
+          ENVEOF
+          chmod 600 docker/.env
+
           deploy_tag() {
             IMAGE_TAG="\$1" ECR_REGISTRY="\$ECR_REGISTRY" \
               docker compose -f docker/docker-compose.yml pull
