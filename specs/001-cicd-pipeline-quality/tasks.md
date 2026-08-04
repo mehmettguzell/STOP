@@ -40,7 +40,7 @@ greenfield creation.
       (`snap list | grep ssm`, `aws ssm describe-instance-information`) and the host's instance
       role permits ECR pull + Secrets Manager read (already established) — no new IAM needed for
       this, just verification
-- [X] T004 [P] Add Testcontainers dependencies (`testcontainers-bom`, `postgresql`, `kafka`
+- [ ] T004 [P] Add Testcontainers dependencies (`testcontainers-bom`, `postgresql`, `kafka`
       JUnit 5 modules) to `identity-service/pom.xml`, `match-service/pom.xml`,
       `communication-service/pom.xml`, `notification-service/pom.xml` (`api-gateway` has no DB/
       Kafka dependency, skip)
@@ -56,7 +56,7 @@ compile Testcontainers-based tests.
 
 **⚠️ CRITICAL**: No user story phase below can be validated end-to-end until this phase is done.
 
-- [X] T005 Change the `test` job's Maven goal in `.github/workflows/build.yml` from
+- [ ] T005 Change the `test` job's Maven goal in `.github/workflows/build.yml` from
       `mvn -B clean test` to `mvn -B clean verify` so Testcontainers-backed integration tests
       (added in US1) actually run
 - [X] T006 Add Docker Buildx layer caching (`docker/setup-buildx-action` +
@@ -80,19 +80,19 @@ place. User story phases below can now be implemented and validated independentl
 
 ### Tests for User Story 1
 
-- [X] T008 [P] [US1] Add a Testcontainers integration test class
+- [ ] T008 [P] [US1] Add a Testcontainers integration test class
       `identity-service/src/test/java/com/stop/identity_service/IdentityServiceIT.java` that
       boots an ephemeral Postgres and exercises at least one repository/service path against it
-- [X] T009 [P] [US1] Add a Testcontainers integration test class
+- [ ] T009 [P] [US1] Add a Testcontainers integration test class
       `match-service/src/test/java/com/stop/match_service/MatchServiceIT.java` (ephemeral
       Postgres)
-- [X] T010 [P] [US1] Add a Testcontainers integration test class
+- [ ] T010 [P] [US1] Add a Testcontainers integration test class
       `communication-service/src/test/java/com/stop/communication_service/CommunicationServiceIT.java`
       (ephemeral Postgres)
-- [X] T011 [P] [US1] Add a Testcontainers integration test class
+- [ ] T011 [P] [US1] Add a Testcontainers integration test class
       `notification-service/src/test/java/com/stop/notification_service/NotificationServiceIT.java`
       (ephemeral Postgres)
-- [X] T012 [P] [US1] Add at least one Testcontainers-backed Kafka producer/consumer integration
+- [ ] T012 [P] [US1] Add at least one Testcontainers-backed Kafka producer/consumer integration
       test (ephemeral Kafka) in whichever service's `kafka/` package most directly owns a
       producer→consumer flow (e.g. `identity-service/src/test/java/.../user/kafka/UserCreatedFlowIT.java`)
 

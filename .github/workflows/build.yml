@@ -52,8 +52,8 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Run unit + Testcontainers integration tests
-        run: mvn -B clean verify -f ${{ matrix.service }}/pom.xml
+      - name: Run unit tests
+        run: mvn -B clean test -f ${{ matrix.service }}/pom.xml
 
   build:
     needs: [changes, test]

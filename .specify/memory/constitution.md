@@ -32,10 +32,14 @@ Follow-up TODOs:
   Live AWS-side verification (repos exist, role has the ECR push + SSM SendCommand policies
   attached, SSM Agent registered on the host) is still pending — see
   specs/001-cicd-pipeline-quality/tasks.md T001-T003.
-- TESTCONTAINERS: Resolved. `test` stage now runs `mvn verify`; each of identity-service,
-  match-service, communication-service, and notification-service has a Testcontainers-backed
-  `*IT.java` integration test against ephemeral Postgres, plus one cross-service Kafka flow test
-  (match-service's `UserSuspendedFlowIT`) against ephemeral Kafka.
+- TODO(TESTCONTAINERS): Reverted. A first attempt at adding Testcontainers-backed `*IT.java`
+  tests failed CI repeatedly — this Spring Boot version's split `-test` starters (and even the
+  umbrella `spring-boot-starter-test`) did not resolve `@DataJpaTest`/`@AutoConfigureTestDatabase`
+  on the compile classpath, and the underlying `org.testcontainers:*` module version mismatch
+  with `spring-boot-dependencies` was never fully pinned down. All Testcontainers dependencies
+  and test classes were removed; `test` stage runs `mvn test` (existing Mockito unit tests only)
+  again. Needs a properly verified local Maven resolution (not guessed against CI) before
+  retrying.
 - DEPLOY_TRANSPORT: deploy.yml now uses `aws ssm send-command` (AWS-RunShellScript), not SSH —
   the `SSH_HOST`/`SSH_USER`/`SSH_KEY` repo secrets are no longer referenced and should be deleted
   from GitHub once the SSM-based deploy is confirmed working end-to-end.
