@@ -162,6 +162,8 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.event_name == 'push'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required for repository_dispatch via GITHUB_TOKEN
     steps:
       - name: Dispatch deploy event
         uses: peter-evans/repository-dispatch@v3
