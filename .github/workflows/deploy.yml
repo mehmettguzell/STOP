@@ -22,69 +22,82 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_GHA_ECR_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy via SSM (no SSH)
+      - name: Deploy via SSM (no git, no SSH on the server)
         env:
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha }}
           INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
         run: |
-          cat > /tmp/deploy.sh <<EOF
           set -euo pipefail
-          cd /opt/STOP
-          git pull origin main
 
-          REGION=${AWS_REGION}
+          # Only docker-compose.yml ever lands on the server — no repo clone, no
+          # source code. It's rewritten from this run's checkout every deploy, so
+          # the server self-heals if /opt/STOP is ever lost or edited by hand.
+          COMPOSE_B64=$(base64 -w0 docker/docker-compose.yml)
+
+          # Single-quoted heredoc: this (GitHub Actions) shell touches NOTHING in
+          # here — every $VAR below is resolved later, by the remote host's own
+          # shell, when SSM actually runs it. No double-escaping required.
+          REMOTE_SCRIPT=$(cat <<'SCRIPT_EOF'
+          set -euo pipefail
+          REGION=eu-north-1
           ECR_REGISTRY=603366204207.dkr.ecr.eu-north-1.amazonaws.com
-          NEW_TAG="${DEPLOY_SHA}"
-          PREV_TAG_FILE=".last-deployed-tag"
-          PREV_TAG=\$(cat "\$PREV_TAG_FILE" 2>/dev/null || echo "latest")
+          PREV_TAG_FILE=/opt/STOP/.last-deployed-tag
+          PREV_TAG=$(cat "$PREV_TAG_FILE" 2>/dev/null || echo "latest")
 
-          # Host authenticates to ECR using its own IAM instance role — no long-lived
-          # AWS credentials are stored anywhere in CI or on the host.
-          aws ecr get-login-password --region "\$REGION" | \
-            docker login --username AWS --password-stdin "\$ECR_REGISTRY"
+          # Host authenticates to ECR and Secrets Manager using its own IAM
+          # instance role — no long-lived AWS credentials pass through this
+          # GitHub Actions run at all.
+          aws ecr get-login-password --region "$REGION" | \
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
           command -v jq >/dev/null 2>&1 || (apt-get update -y && apt-get install -y jq)
 
           get_secret() {
-            aws secretsmanager get-secret-value --region "\$REGION" --secret-id "\$1" \
+            aws secretsmanager get-secret-value --region "$REGION" --secret-id "$1" \
               --query SecretString --output text
           }
 
-          IDENTITY_DB_PASSWORD=\$(get_secret stop/prod/identity-db | jq -r .password)
-          MATCH_DB_PASSWORD=\$(get_secret stop/prod/match-db | jq -r .password)
-          COMMUNICATION_DB_PASSWORD=\$(get_secret stop/prod/communication-db | jq -r .password)
-          NOTIFICATION_DB_PASSWORD=\$(get_secret stop/prod/notification-db | jq -r .password)
-          JWT_PUBLIC_KEY=\$(get_secret stop/prod/jwt-keys | jq -r .public)
-          JWT_PRIVATE_KEY=\$(get_secret stop/prod/jwt-keys | jq -r .private)
+          IDENTITY_DB_PASSWORD=$(get_secret stop/prod/identity-db | jq -r .password)
+          MATCH_DB_PASSWORD=$(get_secret stop/prod/match-db | jq -r .password)
+          COMMUNICATION_DB_PASSWORD=$(get_secret stop/prod/communication-db | jq -r .password)
+          NOTIFICATION_DB_PASSWORD=$(get_secret stop/prod/notification-db | jq -r .password)
+          JWT_PUBLIC_KEY=$(get_secret stop/prod/jwt-keys | jq -r .public)
+          JWT_PRIVATE_KEY=$(get_secret stop/prod/jwt-keys | jq -r .private)
 
-          cat > docker/.env <<ENVEOF
+          cat > /opt/STOP/.env <<ENVEOF
           SPRING_PROFILES_ACTIVE=prod
           ALLOWED_ORIGIN=https://stophalisaha.duckdns.org
+          ECR_REGISTRY=$ECR_REGISTRY
+          IMAGE_TAG=$NEW_TAG
 
           COMMUNICATION_DB_NAME=communication_db
           COMMUNICATION_DB_USER=communication_user
-          COMMUNICATION_DB_PASSWORD=\$COMMUNICATION_DB_PASSWORD
+          COMMUNICATION_DB_PASSWORD=$COMMUNICATION_DB_PASSWORD
           COMMUNICATION_DB_URL=jdbc:postgresql://communication-db:5432/communication_db
 
           IDENTITY_DB_NAME=identity_db
           IDENTITY_DB_USER=identity_user
-          IDENTITY_DB_PASSWORD=\$IDENTITY_DB_PASSWORD
+          IDENTITY_DB_PASSWORD=$IDENTITY_DB_PASSWORD
           IDENTITY_DB_URL=jdbc:postgresql://identity-db:5432/identity_db
 
           MATCH_DB_NAME=match_db
           MATCH_DB_USER=match_user
-          MATCH_DB_PASSWORD=\$MATCH_DB_PASSWORD
+          MATCH_DB_PASSWORD=$MATCH_DB_PASSWORD
           MATCH_DB_URL=jdbc:postgresql://match-db:5432/match_db
 
           NOTIFICATION_DB_NAME=notification_db
           NOTIFICATION_DB_USER=notification_user
-          NOTIFICATION_DB_PASSWORD=\$NOTIFICATION_DB_PASSWORD
+          NOTIFICATION_DB_PASSWORD=$NOTIFICATION_DB_PASSWORD
           NOTIFICATION_DB_URL=jdbc:postgresql://notification-db:5432/notification_db
 
           KAFKA_BOOTSTRAP_SERVERS=broker:9092
@@ -98,51 +111,60 @@ jobs:
           GATEWAY_COMMUNICATION_URI=http://communication-service:8084
           GATEWAY_COMMUNICATION_WS_URI=ws://communication-service:8084
 
-          JWT_PUBLIC_KEY="\$JWT_PUBLIC_KEY"
-          JWT_PRIVATE_KEY="\$JWT_PRIVATE_KEY"
-
-          ECR_REGISTRY=\$ECR_REGISTRY
+          JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY"
+          JWT_PRIVATE_KEY="$JWT_PRIVATE_KEY"
           ENVEOF
-          chmod 600 docker/.env
+          chmod 600 /opt/STOP/.env
 
           deploy_tag() {
-            IMAGE_TAG="\$1" ECR_REGISTRY="\$ECR_REGISTRY" \
-              docker compose -f docker/docker-compose.yml pull
-            IMAGE_TAG="\$1" ECR_REGISTRY="\$ECR_REGISTRY" \
-              docker compose -f docker/docker-compose.yml up -d
+            IMAGE_TAG="$1" docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml pull
+            IMAGE_TAG="$1" docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml up -d --remove-orphans
           }
 
           wait_healthy() {
             for svc in identity-service match-service communication-service notification-service api-gateway; do
-              timeout 120 bash -c "until [ \\"\\\$(docker inspect -f '{{.State.Health.Status}}' \$svc 2>/dev/null)\\" = 'healthy' ]; do sleep 5; done" \
+              timeout 120 bash -c "until [ \"\$(docker inspect -f '{{.State.Health.Status}}' $svc 2>/dev/null)\" = 'healthy' ]; do sleep 5; done" \
                 || return 1
             done
           }
 
-          echo "Deploying tag \${NEW_TAG} (previous: \${PREV_TAG})"
-          deploy_tag "\$NEW_TAG"
+          echo "Deploying tag $NEW_TAG (previous: $PREV_TAG)"
+          deploy_tag "$NEW_TAG"
 
           if wait_healthy; then
-            echo "\$NEW_TAG" > "\$PREV_TAG_FILE"
+            echo "$NEW_TAG" > "$PREV_TAG_FILE"
             echo "Deploy succeeded."
           else
-            echo "Healthcheck failed — rolling back to \${PREV_TAG}"
-            deploy_tag "\$PREV_TAG"
+            echo "Healthcheck failed — rolling back to $PREV_TAG"
+            deploy_tag "$PREV_TAG"
             wait_healthy || echo "WARNING: rollback healthcheck also failed, manual intervention required"
             exit 1
           fi
-          EOF
 
-          # Turn the script into the JSON array format AWS-RunShellScript expects,
-          # one array element per line — avoids shell-escaping the whole script
-          # through --parameters shorthand syntax.
-          jq -Rs '{commands: split("\n")}' /tmp/deploy.sh > /tmp/params.json
+          docker image prune -f
+          SCRIPT_EOF
+          )
+
+          # NEW_TAG is the one value the remote script needs that only this
+          # (GitHub Actions) shell knows — inject it as a real line before the
+          # fully-literal heredoc body above.
+          FULL_SCRIPT="NEW_TAG=${DEPLOY_SHA}
+          ${REMOTE_SCRIPT}"
+
+          PARAMS=$(jq -n \
+            --arg compose_b64 "$COMPOSE_B64" \
+            --arg script "$FULL_SCRIPT" \
+            '{commands: [
+              "mkdir -p /opt/STOP",
+              ("echo " + $compose_b64 + " | base64 -d > /opt/STOP/docker-compose.yml"),
+              $script
+            ]}')
 
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy STOP ${DEPLOY_SHA}" \
-            --parameters file:///tmp/params.json \
+            --parameters "$PARAMS" \
             --query "Command.CommandId" --output text)
 
           echo "SSM command: $COMMAND_ID"
