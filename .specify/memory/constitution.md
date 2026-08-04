@@ -1,29 +1,44 @@
 <!--
 Sync Impact Report
-Version change: template (unratified) → 1.0.0
-Rationale: Initial ratification. No prior filled constitution existed; this is the first
-codification of principles already observed in the STOP codebase (feature-folder layering,
-Kafka-first inter-service communication, per-service JWT validation, DB-per-service isolation,
-AWS Secrets Manager secret handling). Treated as MINOR→bootstrapped as MAJOR 1.0.0 per governance
-rules for first ratification.
+Version change: 1.0.0 → 1.1.0
+Rationale: MINOR bump — materially expanded guidance, no principle redefined or removed. The
+"Development Workflow" section is replaced with a full pipeline specification (change-detection,
+test, build/publish to ECR, release-please, serialized deploy with rollback) reflecting the
+target CI/CD design; the prior one-paragraph description (SSH + build-on-host) is superseded.
+"Technology & Deployment Constraints" is updated to match: images are built once in CI and
+pulled by tag on EC2, the host no longer compiles source or builds images itself.
 
-Modified principles: n/a (initial)
-Added sections: Core Principles (I-VI), Technology & Deployment Constraints, Development Workflow,
-Governance
-Removed sections: none (template placeholders replaced)
+Modified principles: none renamed/redefined
+Modified sections: Technology & Deployment Constraints (image provenance updated), Development
+Workflow (fully replaced with staged pipeline spec + commit conventions subsection)
+Added sections: none new at the ## level (Development Workflow gained "Pipeline stages" and
+"Commit conventions" subsections)
+Removed sections: none
 
 Templates requiring updates:
 ✅ .specify/templates/plan-template.md — "Constitution Check" gate is generic, no principle names
    hardcoded; no edit required.
 ✅ .specify/templates/spec-template.md — no constitution-specific references found.
 ✅ .specify/templates/tasks-template.md — no constitution-specific references found.
-⚠ README.md — does not yet document the module-boundary / Kafka-first / per-service-JWT rules
-   codified here; recommend a follow-up doc pass (not done in this change, out of scope for a
-   governance-file update).
+✅ .github/workflows/build.yml, deploy.yml, release-please.yml — implemented to match the staged
+  pipeline (changes → test → build/push-to-ECR → release-please → deploy-with-rollback) and
+  docker/docker-compose.yml switched from `build:` to `image:` (ECR + tag) for all five services.
+✅ README.md — now documents the module-boundary / Kafka-first / per-service-JWT rules and the
+   CI/CD pipeline stages; initial ratification's pending item resolved.
 
 Follow-up TODOs:
-- TODO(RATIFICATION_DATE): Set to the date this file is first merged if different from today's
-  drafting date (2026-08-04 used here since no earlier ratified version exists in git history).
+- TODO(AWS_SETUP): Code-side is done — build.yml/deploy.yml assume an `AWS_GHA_ECR_ROLE_ARN`
+  OIDC-trusted IAM role secret, an `EC2_INSTANCE_ID` secret, and the `stop/*` ECR repositories.
+  Live AWS-side verification (repos exist, role has the ECR push + SSM SendCommand policies
+  attached, SSM Agent registered on the host) is still pending — see
+  specs/001-cicd-pipeline-quality/tasks.md T001-T003.
+- TESTCONTAINERS: Resolved. `test` stage now runs `mvn verify`; each of identity-service,
+  match-service, communication-service, and notification-service has a Testcontainers-backed
+  `*IT.java` integration test against ephemeral Postgres, plus one cross-service Kafka flow test
+  (match-service's `UserSuspendedFlowIT`) against ephemeral Kafka.
+- DEPLOY_TRANSPORT: deploy.yml now uses `aws ssm send-command` (AWS-RunShellScript), not SSH —
+  the `SSH_HOST`/`SSH_USER`/`SSH_KEY` repo secrets are no longer referenced and should be deleted
+  from GitHub once the SSM-based deploy is confirmed working end-to-end.
 -->
 
 # STOP Constitution
@@ -129,10 +144,12 @@ different contract per service.
 ## Technology & Deployment Constraints
 
 Backend services are Spring Boot (Java) built with Maven, packaged as Docker images, and
-orchestrated via `docker/docker-compose.yml` on a single EC2 host. Each service has its own
-Postgres 15 database container; Redis and Kafka (`apache/kafka:4.2.0`, KRaft mode) are shared
-infrastructure on the `backend` network. Container memory limits are explicitly set per service
-tier (`x-java-resources`, `x-db-resources`, `x-kafka-resources`, `x-redis-resources` anchors in
+orchestrated via `docker/docker-compose.yml` on a single EC2 host. Images are built once in CI,
+pushed to Amazon ECR, and pulled by tag on the EC2 host — the host MUST NOT compile source or
+build images itself (see Development Workflow, stage 3). Each service has its own Postgres 15
+database container; Redis and Kafka (`apache/kafka:4.2.0`, KRaft mode) are shared infrastructure
+on the `backend` network. Container memory limits are explicitly set per service tier
+(`x-java-resources`, `x-db-resources`, `x-kafka-resources`, `x-redis-resources` anchors in
 `docker-compose.yml`) — new services or infra components MUST define resource limits/reservations
 rather than running unbounded. `api-gateway` (Spring Cloud Gateway) is the sole public entry point
 (port 8080 exposed); internal services are not directly reachable from outside the `backend`
@@ -140,12 +157,50 @@ network.
 
 ## Development Workflow
 
-Deployment is triggered by pushes to `main` via `.github/workflows/deploy.yml`, which SSHes into
-the EC2 host, pulls, runs `mvn clean package -DskipTests` per service, and runs
-`docker compose up -d --build`. Build steps MUST NOT require any secret to be present — secrets
-are only needed at container runtime, never at compile/package time, and any change to the build
-process MUST preserve this separation. Git commit messages follow conventional-commit-style
-prefixes (`chore:`, `fix:`, `feat:`) in imperative mood, matching existing history.
+### Pipeline stages
+
+All changes reach production through a GitHub Actions pipeline triggered on push to `main`.
+The pipeline is organized into ordered stages; each MUST pass before the next runs.
+
+**1. `changes` — change detection.** A path-filter job determines which services are affected
+by the push and emits a matrix consumed by downstream stages. Test, build, and deploy MUST
+operate only on affected services, so an unrelated change never rebuilds, retests, or
+redeploys the entire system. A service with no source changes MUST NOT be rebuilt or redeployed.
+
+**2. `test` — verification.** For every affected service the pipeline runs unit tests,
+integration tests against ephemeral dependencies (e.g. Testcontainers) — never shared or
+production infrastructure such as prod RDS — and a container healthcheck that boots the built
+image and confirms `/actuator/health` reports `UP`. A failing test or healthcheck MUST halt the
+pipeline; no artifact from a failed run may be built, pushed, or deployed.
+
+**3. `build` — package & publish.** For every affected service the pipeline runs
+`mvn clean package`, builds the Docker image, tags it with an immutable tag (git SHA; plus the
+release version where applicable), authenticates to Amazon ECR, and pushes the image. Build,
+package, and image-build steps MUST NOT require any application secret to be present — secrets
+are needed only at container runtime, never at compile/package/build time, and any change to the
+build process MUST preserve this separation. Images are the sole deployment artifact; the EC2
+host MUST NOT compile source or build images itself.
+
+**4. `release-please` — versioning & changelog.** Release automation parses conventional-commit
+history on `main` to compute the next semantic version and maintain a release PR with an
+auto-generated changelog. Merging the release PR cuts the version tag and GitHub release that
+deployment references. Because versioning is derived mechanically from commit messages,
+conventional-commit prefixes are load-bearing, not cosmetic.
+
+**5. `deploy` — release to EC2.** Deployment connects to the EC2 host, pulls the pre-built
+images from ECR by tag, and runs `docker compose up -d` (without `--build`, since images are
+already published). Runtime secrets are injected into containers at startup from AWS Secrets
+Manager; they are never baked into images or committed to the compose configuration. Deploys
+MUST be serialized (no overlapping runs against the same host), a post-deploy healthcheck MUST
+confirm each service reports `UP`, and a failed healthcheck MUST roll back to the previously
+deployed image tag.
+
+### Commit conventions
+
+Git commit messages MUST follow conventional-commit prefixes (`chore:`, `fix:`, `feat:`, and
+breaking-change markers) in imperative mood, matching existing history. This is a hard
+requirement, not a style preference: `release-please` derives version bumps and changelog
+entries directly from these prefixes, so a mislabeled commit produces an incorrect release.
 
 ## Governance
 
@@ -161,4 +216,4 @@ Pull requests and code reviews MUST verify compliance with the Core Principles a
 deviation (e.g. a new synchronous REST call, a controller bypassing its service layer) MUST be
 called out explicitly in the PR description with a rationale, not merged silently.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-04 | **Last Amended**: 2026-08-04
+**Version**: 1.1.0 | **Ratified**: 2026-08-04 | **Last Amended**: 2026-08-04
