@@ -17,3 +17,4 @@ EXPOSE 8082
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
 
 # trigger initial GHCR build
+# retrigger to verify GHCR push
