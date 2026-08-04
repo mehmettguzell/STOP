@@ -1,37 +1,34 @@
 <!--
 Sync Impact Report
-Version change: 1.0.0 → 1.1.0
-Rationale: MINOR bump — materially expanded guidance, no principle redefined or removed. The
-"Development Workflow" section is replaced with a full pipeline specification (change-detection,
-test, build/publish to ECR, release-please, serialized deploy with rollback) reflecting the
-target CI/CD design; the prior one-paragraph description (SSH + build-on-host) is superseded.
-"Technology & Deployment Constraints" is updated to match: images are built once in CI and
-pulled by tag on EC2, the host no longer compiles source or builds images itself.
+Version change: 1.1.0 → 1.1.1
+Rationale: PATCH — implementation-detail correction, no principle or pipeline stage
+added/removed/redefined. Image registry switched from Amazon ECR to the GitHub Container
+Registry (`ghcr.io`) after repeated, unresolved IAM permission failures on the EC2 host's
+`ecr:GetAuthorizationToken` call blocked every deploy attempt. GHCR removes AWS credentials
+from the build stage entirely (push uses the run's own `GITHUB_TOKEN`) and reduces the deploy
+stage's AWS dependency to Secrets Manager + SSM only, with a GHCR pull token sourced from
+Secrets Manager rather than IAM.
 
-Modified principles: none renamed/redefined
-Modified sections: Technology & Deployment Constraints (image provenance updated), Development
-Workflow (fully replaced with staged pipeline spec + commit conventions subsection)
-Added sections: none new at the ## level (Development Workflow gained "Pipeline stages" and
-"Commit conventions" subsections)
+Modified sections: Technology & Deployment Constraints, Development Workflow stages 3 and 5
+(ECR → GHCR wording)
+Added sections: none
 Removed sections: none
 
 Templates requiring updates:
-✅ .specify/templates/plan-template.md — "Constitution Check" gate is generic, no principle names
-   hardcoded; no edit required.
-✅ .specify/templates/spec-template.md — no constitution-specific references found.
-✅ .specify/templates/tasks-template.md — no constitution-specific references found.
-✅ .github/workflows/build.yml, deploy.yml, release-please.yml — implemented to match the staged
-  pipeline (changes → test → build/push-to-ECR → release-please → deploy-with-rollback) and
-  docker/docker-compose.yml switched from `build:` to `image:` (ECR + tag) for all five services.
-✅ README.md — now documents the module-boundary / Kafka-first / per-service-JWT rules and the
-   CI/CD pipeline stages; initial ratification's pending item resolved.
+✅ .specify/templates/plan-template.md, spec-template.md, tasks-template.md — no
+   constitution-specific references found, no edit required.
+✅ .github/workflows/build.yml, deploy.yml — rewritten for GHCR (docker/login-action with
+   GITHUB_TOKEN for push; Secrets-Manager-sourced PAT for pull on the host).
+   docker/docker-compose.yml image references switched from `${ECR_REGISTRY}` to
+   `${GHCR_REGISTRY}` for all five services.
+✅ README.md — updated to reference GHCR instead of ECR.
 
 Follow-up TODOs:
-- TODO(AWS_SETUP): Code-side is done — build.yml/deploy.yml assume an `AWS_GHA_ECR_ROLE_ARN`
-  OIDC-trusted IAM role secret, an `EC2_INSTANCE_ID` secret, and the `stop/*` ECR repositories.
-  Live AWS-side verification (repos exist, role has the ECR push + SSM SendCommand policies
-  attached, SSM Agent registered on the host) is still pending — see
-  specs/001-cicd-pipeline-quality/tasks.md T001-T003.
+- TODO(AWS_SETUP): A new Secrets Manager secret `stop/prod/ghcr-pat` (a GitHub PAT with
+  `read:packages` scope, key `token`) must be created — the deploy script now depends on it to
+  authenticate `docker login ghcr.io` on the host. The EC2 instance role's now-unused
+  `ecr-pull`/`ecr-push`-style policies can be removed once GHCR is confirmed working end-to-end
+  (cleanup, not blocking).
 - TODO(TESTCONTAINERS): Reverted. A first attempt at adding Testcontainers-backed `*IT.java`
   tests failed CI repeatedly — this Spring Boot version's split `-test` starters (and even the
   umbrella `spring-boot-starter-test`) did not resolve `@DataJpaTest`/`@AutoConfigureTestDatabase`
@@ -149,7 +146,7 @@ different contract per service.
 
 Backend services are Spring Boot (Java) built with Maven, packaged as Docker images, and
 orchestrated via `docker/docker-compose.yml` on a single EC2 host. Images are built once in CI,
-pushed to Amazon ECR, and pulled by tag on the EC2 host — the host MUST NOT compile source or
+pushed to the GitHub Container Registry (`ghcr.io`), and pulled by tag on the EC2 host — the host MUST NOT compile source or
 build images itself (see Development Workflow, stage 3). Each service has its own Postgres 15
 database container; Redis and Kafka (`apache/kafka:4.2.0`, KRaft mode) are shared infrastructure
 on the `backend` network. Container memory limits are explicitly set per service tier
@@ -179,7 +176,8 @@ pipeline; no artifact from a failed run may be built, pushed, or deployed.
 
 **3. `build` — package & publish.** For every affected service the pipeline runs
 `mvn clean package`, builds the Docker image, tags it with an immutable tag (git SHA; plus the
-release version where applicable), authenticates to Amazon ECR, and pushes the image. Build,
+release version where applicable), and pushes the image to the GitHub Container Registry using
+the run's own `GITHUB_TOKEN` (no AWS credentials needed for this stage at all). Build,
 package, and image-build steps MUST NOT require any application secret to be present — secrets
 are needed only at container runtime, never at compile/package/build time, and any change to the
 build process MUST preserve this separation. Images are the sole deployment artifact; the EC2
@@ -192,7 +190,10 @@ deployment references. Because versioning is derived mechanically from commit me
 conventional-commit prefixes are load-bearing, not cosmetic.
 
 **5. `deploy` — release to EC2.** Deployment connects to the EC2 host, pulls the pre-built
-images from ECR by tag, and runs `docker compose up -d` (without `--build`, since images are
+images from the GitHub Container Registry by tag (the host authenticates with a pull token
+sourced from Secrets Manager, the one long-lived credential this pipeline still needs since
+GitHub has no IAM-style short-lived token for private package pulls), and runs
+`docker compose up -d` (without `--build`, since images are
 already published). Runtime secrets are injected into containers at startup from AWS Secrets
 Manager; they are never baked into images or committed to the compose configuration. Deploys
 MUST be serialized (no overlapping runs against the same host), a post-deploy healthcheck MUST
@@ -220,4 +221,4 @@ Pull requests and code reviews MUST verify compliance with the Core Principles a
 deviation (e.g. a new synchronous REST call, a controller bypassing its service layer) MUST be
 called out explicitly in the PR description with a rationale, not merged silently.
 
-**Version**: 1.1.0 | **Ratified**: 2026-08-04 | **Last Amended**: 2026-08-04
+**Version**: 1.1.1 | **Ratified**: 2026-08-04 | **Last Amended**: 2026-08-05

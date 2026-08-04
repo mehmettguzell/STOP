@@ -50,15 +50,9 @@ jobs:
           REMOTE_SCRIPT=$(cat <<'SCRIPT_EOF'
           set -euo pipefail
           REGION=eu-north-1
-          ECR_REGISTRY=603366204207.dkr.ecr.eu-north-1.amazonaws.com
+          GHCR_REGISTRY=ghcr.io/mehmettguzell
           PREV_TAG_FILE=/opt/STOP/.last-deployed-tag
           PREV_TAG=$(cat "$PREV_TAG_FILE" 2>/dev/null || echo "latest")
-
-          # Host authenticates to ECR and Secrets Manager using its own IAM
-          # instance role — no long-lived AWS credentials pass through this
-          # GitHub Actions run at all.
-          aws ecr get-login-password --region "$REGION" | \
-            docker login --username AWS --password-stdin "$ECR_REGISTRY"
 
           command -v jq >/dev/null 2>&1 || (apt-get update -y && apt-get install -y jq)
 
@@ -66,6 +60,15 @@ jobs:
             aws secretsmanager get-secret-value --region "$REGION" --secret-id "$1" \
               --query SecretString --output text
           }
+
+          # Host authenticates to GHCR and Secrets Manager using its own IAM
+          # instance role — no long-lived AWS credentials pass through this
+          # GitHub Actions run at all. The GHCR pull token itself is a
+          # necessary long-lived secret (GitHub has no IAM-style short-lived
+          # pull token for private packages), so it's stored in Secrets
+          # Manager like everything else, not embedded anywhere.
+          GHCR_PAT=$(get_secret stop/prod/ghcr-pat | jq -r .token)
+          echo "$GHCR_PAT" | docker login ghcr.io --username mehmettguzell --password-stdin
 
           IDENTITY_DB_PASSWORD=$(get_secret stop/prod/identity-db | jq -r .password)
           MATCH_DB_PASSWORD=$(get_secret stop/prod/match-db | jq -r .password)
@@ -77,7 +80,7 @@ jobs:
           cat > /opt/STOP/.env <<ENVEOF
           SPRING_PROFILES_ACTIVE=prod
           ALLOWED_ORIGIN=https://stophalisaha.duckdns.org
-          ECR_REGISTRY=$ECR_REGISTRY
+          GHCR_REGISTRY=$GHCR_REGISTRY
           IMAGE_TAG=$NEW_TAG
 
           COMMUNICATION_DB_NAME=communication_db
