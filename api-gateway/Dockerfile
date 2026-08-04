@@ -18,3 +18,4 @@ ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
 
 # trigger initial GHCR build
 # retry after smoke test env-file fix
+# retest with fixed smoke test + dispatch-based deploy trigger
