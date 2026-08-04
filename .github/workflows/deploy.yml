@@ -2,25 +2,7 @@ name: Deploy
 
 on:
   push:
-    branches: [main]
+
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            cd /opt/STOP
-            git pull origin main
-            mvn clean package -DskipTests -f identity-service/pom.xml
-            mvn clean package -DskipTests -f match-service/pom.xml
-            mvn clean package -DskipTests -f notification-service/pom.xml
-            mvn clean package -DskipTests -f communication-service/pom.xml
-            mvn clean package -DskipTests -f api-gateway/pom.xml
-            docker compose -f docker/docker-compose.yml down
-            docker compose -f docker/docker-compose.yml up -d --build
+
