@@ -1,0 +1,24 @@
+name: OIDC Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Assume AWS role via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GHA_ECR_ROLE_ARN }}
+          aws-region: eu-north-1
+
+      - name: Confirm identity
+        run: aws sts get-caller-identity
+
+      - name: Confirm ECR access (list repos)
+        run: aws ecr describe-repositories --region eu-north-1
