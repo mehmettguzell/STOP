@@ -1,4 +1,160 @@
-name: build.yml
+name: Build
+
 on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  id-token: write   # required for OIDC -> AWS role assumption
+  contents: read
+
+env:
+  AWS_REGION: eu-north-1
+  ECR_REGISTRY: 603366204207.dkr.ecr.eu-north-1.amazonaws.com
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      services: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            identity-service:
+              - 'identity-service/**'
+            match-service:
+              - 'match-service/**'
+            communication-service:
+              - 'communication-service/**'
+            notification-service:
+              - 'notification-service/**'
+            api-gateway:
+              - 'api-gateway/**'
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Run unit + Testcontainers integration tests
+        run: mvn -B clean verify -f ${{ matrix.service }}/pom.xml
+
+  build:
+    needs: [changes, test]
+    if: needs.changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: ${{ fromJson(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Package jar (no tests — already run in test job)
+        run: mvn -B clean package -DskipTests -f ${{ matrix.service }}/pom.xml
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_GHA_ECR_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image (with layer cache)
+        working-directory: ${{ matrix.service }}
+        run: |
+          IMAGE="${{ env.ECR_REGISTRY }}/stop/${{ matrix.service }}"
+          docker buildx build \
+            --cache-from "type=gha,scope=${{ matrix.service }}" \
+            --cache-to "type=gha,mode=max,scope=${{ matrix.service }}" \
+            --load \
+            -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" \
+            .
+          docker push "$IMAGE:${{ github.sha }}"
+
+      - name: Generate ephemeral CI secrets (.env)
+        working-directory: docker
+        run: |
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ci-private.pem
+          openssl rsa -pubout -in /tmp/ci-private.pem -out /tmp/ci-public.pem
+          {
+            echo "SPRING_PROFILES_ACTIVE=prod"
+            echo "ALLOWED_ORIGIN=http://localhost"
+            echo "ECR_REGISTRY=${{ env.ECR_REGISTRY }}"
+            echo "IMAGE_TAG=${{ github.sha }}"
+            for svc in COMMUNICATION IDENTITY MATCH NOTIFICATION; do
+              echo "${svc}_DB_NAME=ci_db"
+              echo "${svc}_DB_USER=ci_user"
+              echo "${svc}_DB_PASSWORD=ci-only-not-a-real-secret"
+            done
+            echo "COMMUNICATION_DB_URL=jdbc:postgresql://communication-db:5432/ci_db"
+            echo "IDENTITY_DB_URL=jdbc:postgresql://identity-db:5432/ci_db"
+            echo "MATCH_DB_URL=jdbc:postgresql://match-db:5432/ci_db"
+            echo "NOTIFICATION_DB_URL=jdbc:postgresql://notification-db:5432/ci_db"
+            echo "KAFKA_BOOTSTRAP_SERVERS=broker:9092"
+            echo "REDIS_URL=redis://redis:6379"
+            echo "MATCH_SERVICE_URL=http://match-service:8082/api/v1"
+            echo "GATEWAY_IDENTITY_URI=http://identity-service:8081"
+            echo "GATEWAY_MODERATION_URI=http://identity-service:8081"
+            echo "GATEWAY_MATCH_URI=http://match-service:8082"
+            echo "GATEWAY_NOTIFICATION_URI=http://notification-service:8083"
+            echo "GATEWAY_COMMUNICATION_URI=http://communication-service:8084"
+            echo "GATEWAY_COMMUNICATION_WS_URI=ws://communication-service:8084"
+            echo "JWT_PUBLIC_KEY=\"$(cat /tmp/ci-public.pem)\""
+            echo "JWT_PRIVATE_KEY=\"$(cat /tmp/ci-private.pem)\""
+          } > .env
+
+      - name: Boot service + its dependencies via docker compose
+        if: matrix.service != 'api-gateway'
+        working-directory: docker
+        run: |
+          docker compose -f docker-compose.yml up -d ${{ matrix.service }}
+          timeout 150 bash -c \
+            'until [ "$(docker inspect -f "{{.State.Health.Status}}" ${{ matrix.service }} 2>/dev/null)" = "healthy" ]; do sleep 5; done' \
+            || { docker compose -f docker-compose.yml logs ${{ matrix.service }}; exit 1; }
+
+      - name: Smoke-boot api-gateway (no downstream dependencies in this job)
+        if: matrix.service == 'api-gateway'
+        run: |
+          IMAGE="${{ env.ECR_REGISTRY }}/stop/api-gateway:${{ github.sha }}"
+          docker run -d --name gw-smoke -e SPRING_PROFILES_ACTIVE=prod \
+            -e JWT_PUBLIC_KEY="$(cat /tmp/ci-public.pem)" "$IMAGE"
+          sleep 20
+          docker logs gw-smoke | tail -50
+          docker inspect -f '{{.State.Running}}' gw-smoke | grep -q true
+
+      - name: Tear down compose stack
+        if: always() && matrix.service != 'api-gateway'
+        working-directory: docker
+        run: docker compose -f docker-compose.yml down -v
+
+      - name: Push latest tag (only after healthcheck passes)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: docker push "${{ env.ECR_REGISTRY }}/stop/${{ matrix.service }}:latest"
