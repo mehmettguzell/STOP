@@ -15,3 +15,5 @@ COPY --from=build --chown=appuser:appgroup /app/target/communication-app.jar app
 USER appuser
 EXPOSE 8084
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+
+# trigger initial GHCR build

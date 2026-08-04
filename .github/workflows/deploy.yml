@@ -51,8 +51,6 @@ jobs:
           set -euo pipefail
           REGION=eu-north-1
           GHCR_REGISTRY=ghcr.io/mehmettguzell
-          PREV_TAG_FILE=/opt/STOP/.last-deployed-tag
-          PREV_TAG=$(cat "$PREV_TAG_FILE" 2>/dev/null || echo "latest")
 
           command -v jq >/dev/null 2>&1 || (apt-get update -y && apt-get install -y jq)
 
@@ -81,7 +79,7 @@ jobs:
           SPRING_PROFILES_ACTIVE=prod
           ALLOWED_ORIGIN=https://stophalisaha.duckdns.org
           GHCR_REGISTRY=$GHCR_REGISTRY
-          IMAGE_TAG=$NEW_TAG
+          IMAGE_TAG=latest
 
           COMMUNICATION_DB_NAME=communication_db
           COMMUNICATION_DB_USER=communication_user
@@ -119,27 +117,32 @@ jobs:
           ENVEOF
           chmod 600 /opt/STOP/.env
 
-          deploy_tag() {
-            IMAGE_TAG="$1" docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml pull
-            IMAGE_TAG="$1" docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml up -d --remove-orphans
-          }
+          SERVICES="identity-service match-service communication-service notification-service api-gateway"
+
+          # Snapshot the currently-running `latest` as a local `previous` tag
+          # BEFORE pulling — this is a pure local retag (no network), so it
+          # works even if a given service wasn't rebuilt this run and its
+          # `latest` in the registry didn't change. It's the rollback target.
+          for svc in $SERVICES; do
+            docker tag "$GHCR_REGISTRY/stop/$svc:latest" "$GHCR_REGISTRY/stop/$svc:previous" 2>/dev/null || true
+          done
 
           wait_healthy() {
-            for svc in identity-service match-service communication-service notification-service api-gateway; do
+            for svc in $SERVICES; do
               timeout 120 bash -c "until [ \"\$(docker inspect -f '{{.State.Health.Status}}' $svc 2>/dev/null)\" = 'healthy' ]; do sleep 5; done" \
                 || return 1
             done
           }
 
-          echo "Deploying tag $NEW_TAG (previous: $PREV_TAG)"
-          deploy_tag "$NEW_TAG"
+          echo "Deploying latest"
+          docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml pull
+          docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml up -d --remove-orphans
 
           if wait_healthy; then
-            echo "$NEW_TAG" > "$PREV_TAG_FILE"
             echo "Deploy succeeded."
           else
-            echo "Healthcheck failed — rolling back to $PREV_TAG"
-            deploy_tag "$PREV_TAG"
+            echo "Healthcheck failed — rolling back to previous (already local, no pull needed)"
+            IMAGE_TAG=previous docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml up -d --remove-orphans
             wait_healthy || echo "WARNING: rollback healthcheck also failed, manual intervention required"
             exit 1
           fi
@@ -148,15 +151,9 @@ jobs:
           SCRIPT_EOF
           )
 
-          # NEW_TAG is the one value the remote script needs that only this
-          # (GitHub Actions) shell knows — inject it as a real line before the
-          # fully-literal heredoc body above.
-          FULL_SCRIPT="NEW_TAG=${DEPLOY_SHA}
-          ${REMOTE_SCRIPT}"
-
           PARAMS=$(jq -n \
             --arg compose_b64 "$COMPOSE_B64" \
-            --arg script "$FULL_SCRIPT" \
+            --arg script "$REMOTE_SCRIPT" \
             '{commands: [
               "mkdir -p /opt/STOP",
               ("echo " + $compose_b64 + " | base64 -d > /opt/STOP/docker-compose.yml"),

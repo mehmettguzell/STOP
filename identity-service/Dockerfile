@@ -15,3 +15,4 @@ COPY --from=build --chown=appuser:appgroup /app/target/identity-app.jar app.jar
 USER appuser
 EXPOSE 8081
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+# trigger initial GHCR build
