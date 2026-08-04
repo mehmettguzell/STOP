@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/mehmettguzell/STOP/compare/v1.0.1...v1.0.2) (2026-08-04)
+
+
+### Bug Fixes
+
+* **ci:** generate docker/.env from Secrets Manager before deploying ([a69c07e](https://github.com/mehmettguzell/STOP/commit/a69c07e42b6a3c9c3d0d91ae19a77bba5387286c))
+
 ## [1.0.1](https://github.com/mehmettguzell/STOP/compare/v1.0.0...v1.0.1) (2026-08-04)
 
 
