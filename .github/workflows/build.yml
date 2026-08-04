@@ -10,6 +10,10 @@ permissions:
   contents: read
   packages: write   # required to push images to GitHub Container Registry
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GHCR_REGISTRY: ghcr.io/mehmettguzell
 
@@ -119,10 +123,10 @@ jobs:
 
       - name: Smoke-boot api-gateway (no downstream dependencies in this job)
         if: matrix.service == 'api-gateway'
+        working-directory: docker
         run: |
           IMAGE="${{ env.GHCR_REGISTRY }}/stop/api-gateway:${{ github.sha }}"
-          docker run -d --name gw-smoke -e SPRING_PROFILES_ACTIVE=prod \
-            -e JWT_PUBLIC_KEY="$(cat /tmp/ci-public.pem)" "$IMAGE"
+          docker run -d --name gw-smoke --env-file .env "$IMAGE"
           sleep 20
           docker logs gw-smoke | tail -50
           docker inspect -f '{{.State.Running}}' gw-smoke | grep -q true
