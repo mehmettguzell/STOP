@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3](https://github.com/mehmettguzell/STOP/compare/v1.0.2...v1.0.3) (2026-08-04)
+
+
+### Bug Fixes
+
+* **ci:** deploy latest tag, not commit SHA, and force first GHCR build ([6792d05](https://github.com/mehmettguzell/STOP/commit/6792d05c845f9a33356038d1481a51be79bca6cf))
+
 ## [1.0.2](https://github.com/mehmettguzell/STOP/compare/v1.0.1...v1.0.2) (2026-08-04)
 
 
