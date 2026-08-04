@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.1](https://github.com/mehmettguzell/STOP/compare/v1.0.0...v1.0.1) (2026-08-04)
+
+
+### Performance Improvements
+
+* **dev:** run mvn spring-boot:run offline in dev containers ([8615e2b](https://github.com/mehmettguzell/STOP/commit/8615e2bcbc7a0610ab6937cf54039f724a09bf3d))
+
+
+### Reverts
+
+* remove Testcontainers integration tests after repeated CI failures ([18a237a](https://github.com/mehmettguzell/STOP/commit/18a237a50b9bea3185977e07b510554246e2b527))
+
 ## 1.0.0 (2026-08-04)
 
 
