@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/mehmettguzell/STOP/compare/v1.0.0...v1.0.1) (2026-08-04)
+
+
+### Reverts
+
+* remove Testcontainers integration tests after repeated CI failures ([18a237a](https://github.com/mehmettguzell/STOP/commit/18a237a50b9bea3185977e07b510554246e2b527))
+
 ## 1.0.0 (2026-08-04)
 
 
