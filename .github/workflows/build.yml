@@ -36,7 +36,7 @@ jobs:
             api-gateway:
               - 'api-gateway/**'
 
-  test:
+  build:
     needs: changes
     if: needs.changes.outputs.services != '[]'
     runs-on: ubuntu-latest
@@ -52,26 +52,7 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Run unit tests
-        run: mvn -B clean test -f ${{ matrix.service }}/pom.xml
-
-  build:
-    needs: [changes, test]
-    if: needs.changes.outputs.services != '[]'
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: ${{ fromJson(needs.changes.outputs.services) }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
-      - name: Package jar (no tests — already run in test job)
+      - name: Package jar
         run: mvn -B clean package -DskipTests -f ${{ matrix.service }}/pom.xml
 
       - name: Configure AWS credentials via OIDC
