@@ -3,4 +3,4 @@ WORKDIR /app
 COPY pom.xml .
 RUN --mount=type=cache,target=/root/.m2 \
     mvn dependency:go-offline
-CMD ["mvn", "spring-boot:run"]
+CMD ["mvn", "-o", "spring-boot:run"]
