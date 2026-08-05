@@ -1,12 +1,14 @@
 import React from "react";
-import { TouchableOpacity, View, Text, StyleSheet } from "react-native";
+import { TouchableOpacity, View, Text, Image, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Colors, Radius, Shadows } from "../../theme/colors";
 import { useAuthStore } from "../../store/auth.store";
+import { useProfileStore } from "../../store/profile.store";
 
 export default function HeaderAvatar() {
   const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
+  const avatarUrl = useProfileStore((s) => s.profile?.avatarUrl);
 
   if (!user) return null;
 
@@ -23,9 +25,13 @@ export default function HeaderAvatar() {
       onPress={() => navigation.navigate("ProfileTab")}
       activeOpacity={0.85}
     >
-      <Text style={styles.text}>
-        {user.displayName.charAt(0).toUpperCase()}
-      </Text>
+      {avatarUrl ? (
+        <Image source={{ uri: avatarUrl }} style={styles.image} />
+      ) : (
+        <Text style={styles.text}>
+          {user.displayName.charAt(0).toUpperCase()}
+        </Text>
+      )}
       <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
     </TouchableOpacity>
   );
@@ -45,6 +51,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     color: Colors.textInverse,
+  },
+  image: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   statusDot: {
     position: "absolute",

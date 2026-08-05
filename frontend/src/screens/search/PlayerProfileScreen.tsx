@@ -6,6 +6,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { userApi } from '../../api/user.api';
@@ -18,6 +19,7 @@ import { FriendRelation } from '../../types/friendship.types';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import ScoreBadge from '../../components/ui/ScoreBadge';
+import AvatarPicker from '../../components/ui/AvatarPicker';
 import { useAuthStore } from '../../store/auth.store';
 import { Colors } from '../../theme/colors';
 import { getErrorMessage } from '../../utils/error';
@@ -168,11 +170,31 @@ export default function PlayerProfileScreen({ route, navigation }: any) {
       >
         {/* Avatar + Name */}
         <View style={styles.hero}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>
-              {displayName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
+          {isOwnProfile ? (
+            <View style={styles.avatarPickerWrapper}>
+              <AvatarPicker
+                avatarUrl={profile?.avatarUrl ?? null}
+                displayName={displayName}
+                size={96}
+                onChange={(url) =>
+                  setProfile((p) => (p ? { ...p, avatarUrl: url } : p))
+                }
+              />
+            </View>
+          ) : (
+            <View style={styles.avatarCircle}>
+              {profile?.avatarUrl ? (
+                <Image
+                  source={{ uri: profile.avatarUrl }}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                <Text style={styles.avatarText}>
+                  {displayName.charAt(0).toUpperCase()}
+                </Text>
+              )}
+            </View>
+          )}
           <Text style={styles.displayName}>{displayName}</Text>
           {profile?.firstName && profile?.lastName && (
             <Text style={styles.fullName}>
@@ -344,6 +366,8 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   avatarText: { fontSize: 40, fontWeight: '800', color: Colors.black },
+  avatarImage: { width: 96, height: 96, borderRadius: 48 },
+  avatarPickerWrapper: { marginBottom: 14 },
   displayName: { fontSize: 26, fontWeight: '800', color: Colors.text },
   fullName: { fontSize: 15, color: Colors.textSecondary, marginTop: 4 },
   cityBadge: {

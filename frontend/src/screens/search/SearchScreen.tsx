@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   TextInput,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { profileApi } from '../../api/profile.api';
@@ -212,7 +213,11 @@ function PlayerCard({ profile, onPress }: { profile: UserProfileResponse; onPres
   return (
     <TouchableOpacity style={cardStyles.card} activeOpacity={0.85} onPress={onPress}>
       <View style={cardStyles.avatar}>
-        <Text style={cardStyles.avatarText}>{initial}</Text>
+        {profile.avatarUrl ? (
+          <Image source={{ uri: profile.avatarUrl }} style={cardStyles.avatarImage} />
+        ) : (
+          <Text style={cardStyles.avatarText}>{initial}</Text>
+        )}
       </View>
       <View style={cardStyles.info}>
         <Text style={cardStyles.name} numberOfLines={1}>{profile.displayName}</Text>
@@ -393,6 +398,12 @@ const cardStyles = StyleSheet.create({
     borderColor: Colors.primaryBorder,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
   },
   avatarText: {
     fontSize: 19,

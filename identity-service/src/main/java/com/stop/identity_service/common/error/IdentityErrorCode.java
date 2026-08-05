@@ -109,6 +109,19 @@ public enum IdentityErrorCode implements ErrorCode {
             "RESET_TOKEN_EXPIRED",
             "Şifre sıfırlama süresi doldu. Lütfen yeniden talep edin.",
             HttpStatus.GONE
+    ),
+
+    // ── Profil Fotoğrafı ───────────────────────────────────────────────────────
+    INVALID_IMAGE_FILE(
+            "INVALID_IMAGE_FILE",
+            "Geçersiz veya bozuk görsel dosyası. Lütfen JPEG ya da PNG yükleyin.",
+            HttpStatus.BAD_REQUEST
+    ),
+
+    FILE_TOO_LARGE(
+            "FILE_TOO_LARGE",
+            "Dosya boyutu izin verilen sınırı asiyor.",
+            HttpStatus.BAD_REQUEST
     );
 
 

@@ -242,6 +242,9 @@ services:
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
 
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
+
+      AWS_REGION: ${AWS_REGION}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
     depends_on:
       identity-db:
         condition: service_healthy

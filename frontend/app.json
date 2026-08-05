@@ -26,7 +26,15 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [],
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "STOP, profil fotoğrafı seçebilmen için galerine erişim istiyor.",
+          "cameraPermission": "STOP, profil fotoğrafı çekebilmen için kameranıza erişim istiyor."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "749dde50-7668-401e-814c-4998e364b5e7"

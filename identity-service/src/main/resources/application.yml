@@ -9,6 +9,11 @@ identity:
   tracing:
     enabled: false
 
+aws:
+  region: ${AWS_REGION:eu-central-1}
+  s3:
+    bucket: ${AWS_S3_BUCKET:}
+
 logging:
   level:
     root: INFO
@@ -42,6 +47,11 @@ server:
 spring:
   application:
     name: identity-service
+
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
 
   cache:
     type: redis

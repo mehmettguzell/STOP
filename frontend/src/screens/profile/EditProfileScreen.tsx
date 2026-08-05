@@ -49,7 +49,6 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
     weightKg: '',
     dominantFoot: '' as DominantFoot | '',
     bio: '',
-    avatarUrl: '',
   });
 
   useEffect(() => {
@@ -67,7 +66,6 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
           weightKg: profile.weightKg?.toString() ?? '',
           dominantFoot: (profile.dominantFoot as DominantFoot) ?? '',
           bio: profile.bio ?? '',
-          avatarUrl: profile.avatarUrl ?? '',
         });
       } catch (err) {
         Alert.alert('Hata', getErrorMessage(err));
@@ -143,9 +141,6 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
     if (form.bio.trim().length > 2000)
       e.bio = 'En fazla 2000 karakter olabilir';
 
-    if (form.avatarUrl.trim() && !/^https?:\/\/.+/.test(form.avatarUrl.trim()))
-      e.avatarUrl = 'Geçerli bir http(s) adresi olmalı';
-
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -164,7 +159,6 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
         weightKg: form.weightKg ? Number(form.weightKg) : undefined,
         dominantFoot: (form.dominantFoot as DominantFoot) || undefined,
         bio: form.bio.trim() || undefined,
-        avatarUrl: form.avatarUrl.trim() || undefined,
       });
       invalidate();
       Alert.alert('Güncellendi', 'Profilin başarıyla kaydedildi.', [
@@ -297,16 +291,6 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
             numberOfLines={3}
             maxLength={2000}
           />
-          <Input
-            label="Avatar URL (opsiyonel)"
-            placeholder="https://..."
-            value={form.avatarUrl}
-            onChangeText={setField('avatarUrl')}
-            error={errors.avatarUrl}
-            keyboardType="url"
-            autoCapitalize="none"
-          />
-
           <Button
             title="Kaydet"
             onPress={handleSave}
