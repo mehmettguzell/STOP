@@ -1,82 +1,81 @@
+# NOTE: This is a corrected starting point. It still depends on your
+# docker/docker-compose.yml (service names, ports, healthchecks, env_file).
+# Reconcile the marked (#>>) points with that file before merging.
+
 name: Build
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags:
+      - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
-  packages: write   # required to push images to GitHub Container Registry
+  packages: write
 
 concurrency:
   group: build-${{ github.ref }}
-  cancel-in-progress: true
+  # A release build pushes images; cancelling mid-push can leave partial state.
+  cancel-in-progress: false
 
 env:
   GHCR_REGISTRY: ghcr.io/mehmettguzell
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      services: ${{ steps.filter.outputs.changes }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            identity-service:
-              - 'identity-service/**'
-            match-service:
-              - 'match-service/**'
-            communication-service:
-              - 'communication-service/**'
-            notification-service:
-              - 'notification-service/**'
-            api-gateway:
-              - 'api-gateway/**'
-
   build:
-    needs: changes
-    if: needs.changes.outputs.services != '[]'
     runs-on: ubuntu-latest
     strategy:
+      # If one service fails, keep building the others.
+      fail-fast: false
       matrix:
-        service: ${{ fromJson(needs.changes.outputs.services) }}
+        # Release trigger = build ALL services at one consistent version.
+        # (paths-filter on a tag push is unreliable: event.before is often the
+        #  zero-SHA, so "changed services" is meaningless for a release build.
+        #  If you want change-based builds, do it in a SEPARATE workflow that
+        #  triggers on `push: branches` / pull_request.)
+        service:
+          - identity-service
+          - match-service
+          - communication-service
+          - notification-service
+          - api-gateway
+
     steps:
       - uses: actions/checkout@v4
 
-      # NOT: Burada bilerek runner uzerinde ayrica `mvn package` CALISTIRILMIYOR.
-      # Her servisin .dockerignore'u `target/` iceriyor, yani runner'da uretilen
-      # jar build context'ine hic girmiyordu; asagidaki docker build zaten tum
-      # projeyi imajin icinde bastan derliyordu. Yani her CI kosusu ayni kodu
-      # IKI KEZ derliyordu (setup-java + mvn package adimi tamamen bosa gidiyordu).
-      # Derleme sinyalinin kendisi docker build adiminda aynen korunuyor.
-
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
-      - name: Build image (with layer cache)
-        working-directory: ${{ matrix.service }}
-        run: |
-          IMAGE="${{ env.GHCR_REGISTRY }}/stop/${{ matrix.service }}"
-          docker buildx build \
-            --cache-from "type=gha,scope=${{ matrix.service }}" \
-            --cache-to "type=gha,mode=max,scope=${{ matrix.service }}" \
-            --load \
-            -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" \
-            .
-          docker push "$IMAGE:${{ github.sha }}"
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.GHCR_REGISTRY }}/stop/${{ matrix.service }}
+          tags: |
+            # format=long,prefix= keeps the FULL commit SHA as the tag,
+            # so your compose IMAGE_TAG=${{ github.sha }} still matches.
+            type=sha,format=long,prefix=
+            type=ref,event=tag
+            type=raw,value=latest
+
+      - name: Build image (load into local daemon, DON'T push yet)
+        uses: docker/build-push-action@v7
+        with:
+          context: ./${{ matrix.service }}
+          load: true
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
       - name: Generate ephemeral CI secrets (.env)
         working-directory: docker
@@ -106,20 +105,35 @@ jobs:
             echo "GATEWAY_NOTIFICATION_URI=http://notification-service:8083"
             echo "GATEWAY_COMMUNICATION_URI=http://communication-service:8084"
             echo "GATEWAY_COMMUNICATION_WS_URI=ws://communication-service:8084"
-            echo "JWT_PUBLIC_KEY=\"$(cat /tmp/ci-public.pem)\""
-            echo "JWT_PRIVATE_KEY=\"$(cat /tmp/ci-private.pem)\""
           } > .env
+          # Multi-line PEM in a compose .env is a known footgun, so strip the
+          # PEM header/footer and join the remaining base64 body into one
+          # line. RsaKeyConfig only needs the base64 body (it strips any
+          # header/footer/whitespace itself), and compose/the app read these
+          # under JWT_PUBLIC_KEY / JWT_PRIVATE_KEY, not a _B64 suffix.
+          {
+            echo "JWT_PUBLIC_KEY=$(grep -v '^-----' /tmp/ci-public.pem | tr -d '\n')"
+            echo "JWT_PRIVATE_KEY=$(grep -v '^-----' /tmp/ci-private.pem | tr -d '\n')"
+          } >> .env
 
+      # ---- VERIFY (non-gateway services) ----------------------------------
       - name: Boot service + its dependencies via docker compose
         if: matrix.service != 'api-gateway'
         working-directory: docker
         run: |
+          #>> If your compose file uses `depends_on: { condition: service_healthy }`,
+          #>> `up -d <service>` already starts deps. If not, list deps explicitly, e.g.:
+          #>> docker compose up -d <service>-db kafka redis ${{ matrix.service }}
           docker compose -f docker-compose.yml up -d ${{ matrix.service }}
           timeout 150 bash -c \
             'until [ "$(docker inspect -f "{{.State.Health.Status}}" ${{ matrix.service }} 2>/dev/null)" = "healthy" ]; do sleep 5; done' \
             || { docker compose -f docker-compose.yml logs ${{ matrix.service }}; exit 1; }
+          #>> The container HEALTHCHECK is your real integration probe IF it hits
+          #>> /actuator/health. If it only checks TCP, add an in-network probe here:
+          #>> docker compose exec -T ${{ matrix.service }} curl -fsS http://localhost:<port>/actuator/health
 
-      - name: Smoke-boot api-gateway (no downstream dependencies in this job)
+      # ---- VERIFY (api-gateway, no downstream deps in this job) ------------
+      - name: Smoke-boot api-gateway
         if: matrix.service == 'api-gateway'
         run: |
           IMAGE="${{ env.GHCR_REGISTRY }}/stop/api-gateway:${{ github.sha }}"
@@ -137,35 +151,19 @@ jobs:
           docker logs gw-smoke | tail -50
           docker inspect -f '{{.State.Running}}' gw-smoke | grep -q true
 
-      - name: Tear down compose stack
-        if: always() && matrix.service != 'api-gateway'
+      # ---- PUSH (only AFTER verification passes) ---------------------------
+      - name: Push verified image (sha + tag + latest)
+        if: success()
+        run: |
+          # meta.outputs.tags is newline-separated; push each one.
+          echo "${{ steps.meta.outputs.tags }}" | while read -r t; do
+            [ -n "$t" ] && docker push "$t"
+          done
+
+      # ---- CLEANUP (always) -----------------------------------------------
+      - name: Cleanup
+        if: always()
         working-directory: docker
-        run: docker compose -f docker-compose.yml down -v
-
-      - name: Push latest tag (only after healthcheck passes)
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: docker push "${{ env.GHCR_REGISTRY }}/stop/${{ matrix.service }}:latest"
-
-  notify-deploy:
-    needs: [changes, build]
-    # Only fires when this push actually rebuilt at least one service and
-    # every matrix leg succeeded — a workflow run that did nothing (e.g. a
-    # push that only touched a workflow file) never reaches this job, so it
-    # can never trigger a deploy. This is what deploy.yml listens for instead
-    # of the Build workflow's overall completion, which also fires (harmlessly
-    # but confusingly) on those no-op runs.
-    if: >
-      needs.changes.outputs.services != '[]' &&
-      needs.build.result == 'success' &&
-      github.ref == 'refs/heads/main' &&
-      github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write   # required for repository_dispatch via GITHUB_TOKEN
-    steps:
-      - name: Dispatch deploy event
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          event-type: deploy
-          client-payload: '{"sha": "${{ github.sha }}"}'
+        run: |
+          docker rm -f gw-smoke 2>/dev/null || true
+          docker compose -f docker-compose.yml down -v 2>/dev/null || true

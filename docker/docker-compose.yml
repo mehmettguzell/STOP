@@ -186,7 +186,7 @@ services:
     container_name: communication-service
     build:
       context: ../communication-service
-    image: ghcr.io/mehmettguzell/stop/communication-service:latest
+    image: ghcr.io/mehmettguzell/stop/communication-service:${IMAGE_TAG:-latest}
     <<: *java-resources
     networks:
       - backend
@@ -220,7 +220,7 @@ services:
     container_name: identity-service
     build:
       context: ../identity-service
-    image: ghcr.io/mehmettguzell/stop/identity-service:latest
+    image: ghcr.io/mehmettguzell/stop/identity-service:${IMAGE_TAG:-latest}
     <<: *java-resources
     networks:
       - backend
@@ -258,7 +258,7 @@ services:
     container_name: match-service
     build:
       context: ../match-service
-    image: ghcr.io/mehmettguzell/stop/match-service:latest
+    image: ghcr.io/mehmettguzell/stop/match-service:${IMAGE_TAG:-latest}
     <<: *java-resources
     networks:
       - backend
@@ -292,7 +292,7 @@ services:
     container_name: notification-service
     build:
       context: ../notification-service
-    image: ghcr.io/mehmettguzell/stop/notification-service:latest
+    image: ghcr.io/mehmettguzell/stop/notification-service:${IMAGE_TAG:-latest}
     <<: *java-resources
     networks:
       - backend
@@ -330,7 +330,7 @@ services:
     container_name: api-gateway
     build:
       context: ../api-gateway
-    image: ghcr.io/mehmettguzell/stop/api-gateway:latest
+    image: ghcr.io/mehmettguzell/stop/api-gateway:${IMAGE_TAG:-latest}
     <<: *java-resources
     networks:
       - backend

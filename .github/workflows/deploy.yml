@@ -1,8 +1,11 @@
 name: Deploy
 
 on:
-  repository_dispatch:
-    types: [deploy]
+  workflow_dispatch:
+  workflow_run:
+    workflows: [ "Build" ]
+    types:
+      - completed
 
 concurrency:
   group: deploy-production
@@ -18,10 +21,16 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Only deploy on a manual run, or after the Build workflow's run actually
+    # succeeded — workflow_run fires on completion regardless of outcome, so
+    # without this a failed build would still trigger (and fail inside) deploy.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.client_payload.sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -29,9 +38,9 @@ jobs:
           role-to-assume: ${{ secrets.AWS_GHA_ECR_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy via SSM (no git, no SSH on the server)
+      - name: Deploy via SSM
         env:
-          DEPLOY_SHA: ${{ github.event.client_payload.sha }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
         run: |
           set -euo pipefail
@@ -124,45 +133,23 @@ jobs:
             docker tag "$GHCR_REGISTRY/stop/$svc:latest" "$GHCR_REGISTRY/stop/$svc:previous" 2>/dev/null || true
           done
 
-          # Bes servis ayni anda aciliyor, o yuzden hepsini TEK bir zaman
-          # penceresinde bekliyoruz. Onceki hali servis basina ayri 120sn'lik
-          # `timeout` calistiriyordu: en kotu durumda 5x120=600sn suruyor ve
-          # asagidaki dis bekleme dongusunun (60x10sn=600sn) butcesini tek
-          # basina bitiriyordu -> deploy gercekte basarili olsa bile Actions
-          # tarafinda TimedOut/InProgress olarak fail goruluyordu.
-          # Ayrica 120sn, compose'daki start_period: 90s + interval: 30s ile
-          # yavas acilan bir serviste zaten sinirda kaliyordu.
-          wait_healthy() {
-            deadline=$(( SECONDS + 300 ))
-            while [ "$SECONDS" -lt "$deadline" ]; do
-              all_healthy=1
-              for svc in $SERVICES; do
-                if [ "$(docker inspect -f '{{.State.Health.Status}}' "$svc" 2>/dev/null)" != "healthy" ]; then
-                  all_healthy=0
-                fi
-              done
-              if [ "$all_healthy" -eq 1 ]; then
-                return 0
-              fi
-              sleep 5
-            done
-            echo "Saglikli olmayan servisler:"
-            for svc in $SERVICES; do
-              echo "  $svc: $(docker inspect -f '{{.State.Health.Status}}' "$svc" 2>/dev/null || echo yok)"
-            done
-            return 1
-          }
-
+          # `--wait --wait-timeout 300` makes Compose itself block until every
+          # service (five of them, opened at once) reports healthy and exit
+          # non-zero if the 300s budget runs out, instead of a hand-rolled
+          # polling loop. The 300s figure matches compose's own
+          # start_period: 90s + interval: 30s x retries: 5 headroom for a
+          # slow-starting service.
           echo "Deploying latest"
           docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml pull
-          docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml up -d --remove-orphans
 
-          if wait_healthy; then
+          if docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml \
+               up -d --remove-orphans --wait --wait-timeout 300; then
             echo "Deploy succeeded."
           else
             echo "Healthcheck failed — rolling back to previous (already local, no pull needed)"
-            IMAGE_TAG=previous docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml up -d --remove-orphans
-            wait_healthy || echo "WARNING: rollback healthcheck also failed, manual intervention required"
+            IMAGE_TAG=previous docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml \
+              up -d --remove-orphans --wait --wait-timeout 300 \
+              || echo "WARNING: rollback healthcheck also failed, manual intervention required"
             exit 1
           fi
 
