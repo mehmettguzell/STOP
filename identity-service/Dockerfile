@@ -1,11 +1,15 @@
 ﻿FROM maven:3.9.16-eclipse-temurin-21-noble AS build
 WORKDIR /app
 COPY pom.xml .
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn dependency:go-offline
+# --mount=type=cache BILEREK kullanilmiyor: BuildKit cache mount'lari
+# `type=gha` katman cache'ine EXPORT EDILMEZ. Onceki halde bu yuzden her CI
+# kosusunda tum Maven bagimliliklari sifirdan iniyordu. Normal bir katman
+# olarak yazilinca pom.xml degismedigi surece bu adim komple gha cache'inden
+# geri yukleniyor.
+# -B (batch mode): binlerce satirlik indirme progress ciktisini da susturur.
+RUN mvn -B dependency:go-offline
 COPY src ./src
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn package -DskipTests
+RUN mvn -B package -DskipTests
 
 
 FROM eclipse-temurin:21.0.11_10-jre-alpine-3.23

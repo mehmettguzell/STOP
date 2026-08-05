@@ -22,3 +22,5 @@ jobs:
 
       - name: Confirm ECR access (list repos)
         run: aws ecr describe-repositories --region eu-north-1
+
+

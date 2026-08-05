@@ -1,6 +1,19 @@
 FROM maven:3.9.16-eclipse-temurin-21-noble
 WORKDIR /app
-COPY pom.xml .
-RUN --mount=type=cache,target=/root/.m2 \
-    mvn dependency:go-offline
-CMD ["mvn", "-o", "spring-boot:run"]
+
+# Burada bilerek `COPY pom.xml` + `dependency:go-offline` YOK.
+#
+# Onceki hali `RUN --mount=type=cache,target=/root/.m2 mvn dependency:go-offline`
+# idi. BuildKit cache mount'u yalnizca build sirasinda var; imaj katmanina
+# YAZILMAZ. Yani indirilen her sey build biter bitmez ucuyordu. Calisma aninda
+# ise compose /root/.m2'ye bos bir named volume bagliyor ve CMD `mvn -o` ile
+# OFFLINE aciliyordu -> "The repository system is offline but the artifact ...
+# has not been downloaded from it before" ile konteyner aninda oluyordu.
+#
+# Dev'de bagimliliklarin dogru yeri zaten paylasilan `maven_cache` volume'u:
+# ilk `docker compose up`ta bir kez iniyor, sonraki tum kalkislarda ve tum
+# servisler arasinda yeniden kullaniliyor. Imaj da saniyeler icinde build oluyor.
+#
+# `-o` (offline) kaldirildi: go-offline zaten bazi eklenti bagimliliklarini
+# getirmiyor, eksik kalani Maven calisma aninda cekip volume'e yaziyor.
+CMD ["mvn", "-B", "spring-boot:run"]

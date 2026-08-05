@@ -124,11 +124,33 @@ jobs:
             docker tag "$GHCR_REGISTRY/stop/$svc:latest" "$GHCR_REGISTRY/stop/$svc:previous" 2>/dev/null || true
           done
 
+          # Bes servis ayni anda aciliyor, o yuzden hepsini TEK bir zaman
+          # penceresinde bekliyoruz. Onceki hali servis basina ayri 120sn'lik
+          # `timeout` calistiriyordu: en kotu durumda 5x120=600sn suruyor ve
+          # asagidaki dis bekleme dongusunun (60x10sn=600sn) butcesini tek
+          # basina bitiriyordu -> deploy gercekte basarili olsa bile Actions
+          # tarafinda TimedOut/InProgress olarak fail goruluyordu.
+          # Ayrica 120sn, compose'daki start_period: 90s + interval: 30s ile
+          # yavas acilan bir serviste zaten sinirda kaliyordu.
           wait_healthy() {
-            for svc in $SERVICES; do
-              timeout 120 bash -c "until [ \"\$(docker inspect -f '{{.State.Health.Status}}' $svc 2>/dev/null)\" = 'healthy' ]; do sleep 5; done" \
-                || return 1
+            deadline=$(( SECONDS + 300 ))
+            while [ "$SECONDS" -lt "$deadline" ]; do
+              all_healthy=1
+              for svc in $SERVICES; do
+                if [ "$(docker inspect -f '{{.State.Health.Status}}' "$svc" 2>/dev/null)" != "healthy" ]; then
+                  all_healthy=0
+                fi
+              done
+              if [ "$all_healthy" -eq 1 ]; then
+                return 0
+              fi
+              sleep 5
             done
+            echo "Saglikli olmayan servisler:"
+            for svc in $SERVICES; do
+              echo "  $svc: $(docker inspect -f '{{.State.Health.Status}}' "$svc" 2>/dev/null || echo yok)"
+            done
+            return 1
           }
 
           echo "Deploying latest"
@@ -166,8 +188,11 @@ jobs:
 
           echo "SSM command: $COMMAND_ID"
 
+          # 120x10sn = 20dk. Uzaktaki script en kotu durumda pull (~3dk) +
+          # ilk saglik beklemesi (5dk) + rollback ve ikinci saglik beklemesi
+          # (5dk) kadar surebiliyor; eski 10dk'lik butce buna yetmiyordu.
           STATUS="Pending"
-          for i in $(seq 1 60); do
+          for i in $(seq 1 120); do
             STATUS=$(aws ssm get-command-invocation \
               --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
               --query "Status" --output text 2>/dev/null || echo "Pending")
