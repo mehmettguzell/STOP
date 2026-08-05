@@ -20,15 +20,15 @@ export const setCachedToken = (token: string | null) => {
 };
 
 const debuggerHost = Constants.expoConfig?.hostUri;
-let host = '192.168.1.143';
+let host = "13.50.15.181";
 
-if (debuggerHost) {
-  host = debuggerHost.split(':')[0];
-} else if (Platform.OS === 'android') {
-  host = '10.0.2.2';
-} else {
-  host = 'localhost';
-}
+// if (debuggerHost) {
+//   host = debuggerHost.split(':')[0];
+// } else if (Platform.OS === 'android') {
+//   host = '10.0.2.2';
+// } else {
+//   host = 'localhost';
+// }
 
 export const BASE_URL = `http://${host}:8080/api/v1`;
 
@@ -49,7 +49,8 @@ const apiClient = axios.create({
 // Request interceptor — attach Bearer token
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    const token = cachedToken ?? await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    const token =
+      cachedToken ?? (await AsyncStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN));
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }

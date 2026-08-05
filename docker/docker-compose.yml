@@ -191,6 +191,8 @@ services:
     networks:
       - backend
       - communication-db-net
+    ports:
+      - "8084:8084"
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
 
