@@ -58,7 +58,6 @@ export interface UserProfileRequest {
   weightKg: number;
   dominantFoot: DominantFoot;
   bio?: string;
-  avatarUrl?: string;
 }
 
 export interface UpdateUserProfileRequest {
@@ -71,7 +70,6 @@ export interface UpdateUserProfileRequest {
   weightKg?: number;
   dominantFoot?: DominantFoot;
   bio?: string;
-  avatarUrl?: string;
 }
 
 export interface ProfileSearchParams {

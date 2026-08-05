@@ -52,13 +52,6 @@ public record UserProfileRequest(
         String dominantFoot,
 
         @Size(max = 2000, message = "Hakkinda alani en fazla 2000 karakter olabilir")
-        String bio,
-
-        @Size(max = 512, message = "Avatar URL en fazla 512 karakter olabilir")
-        @Pattern(
-                regexp = "^https?://[^\\s]+$",
-                message = "Avatar URL gecerli bir http(s) adresi olmalidir"
-        )
-        String avatarUrl
+        String bio
 
 ) {}

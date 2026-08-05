@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Alert,
   TouchableOpacity,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { profileApi } from "../../api/profile.api";
@@ -25,6 +26,7 @@ import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
 import NotificationBell from "../../components/ui/NotificationBell";
 import HeaderAvatar from "../../components/ui/HeaderAvatar";
+import AvatarPicker from "../../components/ui/AvatarPicker";
 import { Colors, Radius, Shadows } from "../../theme/colors";
 import { getErrorCode, getErrorMessage } from "../../utils/error";
 import { AxiosError } from "axios";
@@ -140,13 +142,29 @@ export default function ProfileViewScreen({
         <View style={styles.hero}>
           <View style={styles.heroOrb} />
           <View style={styles.avatarRing}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarText}>
-                {(profile?.displayName ?? user?.displayName ?? "?")
-                  .charAt(0)
-                  .toUpperCase()}
-              </Text>
-            </View>
+            {isOwnProfile ? (
+              <AvatarPicker
+                avatarUrl={profile?.avatarUrl ?? null}
+                displayName={profile?.displayName ?? user?.displayName ?? "?"}
+                size={96}
+                onChange={(url) =>
+                  profile && storeSetProfile({ ...profile, avatarUrl: url })
+                }
+              />
+            ) : (
+              <View style={styles.avatarCircle}>
+                {profile?.avatarUrl ? (
+                  <Image
+                    source={{ uri: profile.avatarUrl }}
+                    style={styles.avatarImage}
+                  />
+                ) : (
+                  <Text style={styles.avatarText}>
+                    {(profile?.displayName ?? "?").charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
           <Text style={styles.displayName}>
             {profile?.displayName ?? user?.displayName}
@@ -343,6 +361,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: { fontSize: 40, fontWeight: "800", color: Colors.textInverse },
+  avatarImage: { width: 96, height: 96, borderRadius: 48 },
   displayName: {
     fontSize: 26,
     fontWeight: "800",

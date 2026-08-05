@@ -8,6 +8,7 @@ import com.stop.identity_service.userProfile.dto.response.UserProfileResponse;
 import com.stop.identity_service.user.entity.user.User;
 import com.stop.identity_service.userProfile.entity.profile.UserProfile;
 import com.stop.identity_service.userProfile.repository.UserProfileRepository;
+import com.stop.identity_service.userProfile.service.avatar.AvatarStorageService;
 import com.stop.identity_service.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ public class UserProfileService {
 
     private final UserService userService;
     private final UserProfileRepository userProfileRepository;
+    private final AvatarStorageService avatarStorageService;
 
     @Transactional
     @CacheEvict(value = {"user:profile", "user:self", "user:public"}, key = "#userId")
@@ -67,6 +69,45 @@ public class UserProfileService {
         return mapToResponse(saved);
     }
 
+    @Transactional
+    @CacheEvict(value = {"user:profile", "user:self", "user:public"}, key = "#userId")
+    public UserProfileResponse updateAvatar(UUID userId, byte[] fileBytes) {
+        log.info("Update avatar userId={}", userId);
+        UserProfile profile = findUserProfile(userId);
+        String previousAvatarUrl = profile.getAvatarUrl();
+
+        String newAvatarUrl = avatarStorageService.uploadAvatar(fileBytes);
+        profile.setAvatarUrl(newAvatarUrl);
+        UserProfile saved = userProfileRepository.save(profile);
+
+        if (previousAvatarUrl != null) {
+            try {
+                avatarStorageService.deleteObject(previousAvatarUrl);
+            } catch (RuntimeException e) {
+                // Orphaned old object is a storage-cost concern, not correctness/security -
+                // must not fail the user's successful upload of their new photo.
+                log.warn("Failed to delete previous avatar userId={}", userId, e);
+            }
+        }
+        log.debug("Avatar updated userId={}", userId);
+        return mapToResponse(saved);
+    }
+
+    @Transactional
+    @CacheEvict(value = {"user:profile", "user:self", "user:public"}, key = "#userId")
+    public UserProfileResponse deleteAvatar(UUID userId) {
+        log.info("Delete avatar userId={}", userId);
+        UserProfile profile = findUserProfile(userId);
+        String currentAvatarUrl = profile.getAvatarUrl();
+        if (currentAvatarUrl != null) {
+            avatarStorageService.deleteObject(currentAvatarUrl);
+            profile.setAvatarUrl(null);
+            userProfileRepository.save(profile);
+            log.debug("Avatar deleted userId={}", userId);
+        }
+        return mapToResponse(profile);
+    }
+
     private UserProfile findUserProfile(UUID userId) {
         return userProfileRepository.findByUserId(userId)
                 .orElseThrow(() -> {
@@ -94,7 +135,6 @@ public class UserProfileService {
                 .weightKg(request.weightKg())
                 .dominantFoot(request.dominantFoot())
                 .bio(request.bio() == null || request.bio().isBlank() ? null : request.bio())
-                .avatarUrl(request.avatarUrl() == null || request.avatarUrl().isBlank() ? null : request.avatarUrl())
                 .build();
     }
 

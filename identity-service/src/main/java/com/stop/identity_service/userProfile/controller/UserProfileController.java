@@ -9,6 +9,8 @@ import com.stop.identity_service.userProfile.repository.spec.UserProfileSpec;
 import com.stop.identity_service.userProfile.service.UserProfileService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import com.stop.identity_service.common.error.IdentityErrorCode;
+import com.stop.identity_service.common.exception.BusinessException;
 import com.stop.identity_service.userProfile.dto.response.SliceResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -16,7 +18,9 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.UUID;
 
@@ -41,6 +45,23 @@ public class UserProfileController {
     @PatchMapping
     public ResponseEntity<UserProfileResponse> updateUserProfile(@RequestBody @Valid UpdateUserProfileRequest request) {
         return ResponseEntity.ok(userProfileService.updateUserProfile(SecurityUtils.getCurrentUserId(), request));
+    }
+
+    @PostMapping("/avatar")
+    public ResponseEntity<UserProfileResponse> uploadAvatar(@RequestParam("file") MultipartFile file) {
+        UUID userId = SecurityUtils.getCurrentUserId();
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (IOException e) {
+            throw new BusinessException(IdentityErrorCode.INVALID_IMAGE_FILE);
+        }
+        return ResponseEntity.ok(userProfileService.updateAvatar(userId, bytes));
+    }
+
+    @DeleteMapping("/avatar")
+    public ResponseEntity<UserProfileResponse> deleteAvatar() {
+        return ResponseEntity.ok(userProfileService.deleteAvatar(SecurityUtils.getCurrentUserId()));
     }
 
     @GetMapping

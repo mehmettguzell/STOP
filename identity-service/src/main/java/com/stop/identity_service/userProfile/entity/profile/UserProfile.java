@@ -78,10 +78,6 @@ public class UserProfile {
             String v = req.bio().isBlank() ? null : req.bio();
             if (!Objects.equals(v, bio)) { bio = v; changed = true; }
         }
-        if (req.avatarUrl() != null) {
-            String v = req.avatarUrl().isBlank() ? null : req.avatarUrl();
-            if (!Objects.equals(v, avatarUrl)) { avatarUrl = v; changed = true; }
-        }
         return changed;
     }
 

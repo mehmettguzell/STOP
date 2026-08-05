@@ -43,7 +43,6 @@ export default function CreateProfileScreen({ navigation }: CreateProfileScreenP
     weightKg: '',
     dominantFoot: '' as DominantFoot | '',
     bio: '',
-    avatarUrl: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
@@ -121,10 +120,6 @@ export default function CreateProfileScreen({ navigation }: CreateProfileScreenP
     if (form.bio.trim().length > 2000)
       e.bio = 'En fazla 2000 karakter olabilir';
 
-    // Avatar URL (opsiyonel)
-    if (form.avatarUrl.trim() && !/^https?:\/\/.+/.test(form.avatarUrl.trim()))
-      e.avatarUrl = 'Geçerli bir http(s) adresi olmalı';
-
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -143,7 +138,6 @@ export default function CreateProfileScreen({ navigation }: CreateProfileScreenP
         weightKg: Number(form.weightKg),
         dominantFoot: form.dominantFoot as DominantFoot,
         bio: form.bio.trim() || undefined,
-        avatarUrl: form.avatarUrl.trim() || undefined,
       });
       invalidate();
       Alert.alert('Profil Oluşturuldu', 'Profilin başarıyla oluşturuldu!', [
@@ -275,16 +269,6 @@ export default function CreateProfileScreen({ navigation }: CreateProfileScreenP
             numberOfLines={3}
             maxLength={2000}
           />
-          <Input
-            label="Avatar URL (opsiyonel)"
-            placeholder="https://..."
-            value={form.avatarUrl}
-            onChangeText={setField('avatarUrl')}
-            error={errors.avatarUrl}
-            keyboardType="url"
-            autoCapitalize="none"
-          />
-
           <Button
             title="Profili Oluştur"
             onPress={handleCreate}

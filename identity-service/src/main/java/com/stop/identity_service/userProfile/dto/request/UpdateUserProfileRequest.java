@@ -35,9 +35,6 @@ public record UpdateUserProfileRequest(
         String dominantFoot,
 
         @Size(max = 2000, message = "Hakkinda alani en fazla 2000 karakter olabilir")
-        String bio,
-
-        @Pattern(regexp = "^https?://[^\\s]+$", message = "Avatar URL gecerli bir http(s) adresi olmalidir")
-        String avatarUrl
+        String bio
 
 ) {}

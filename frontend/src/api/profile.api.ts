@@ -27,4 +27,28 @@ export const profileApi = {
     const { data } = await apiClient.get<SliceResponse<UserProfileResponse>>('/users/profile', { params });
     return data;
   },
+
+  uploadAvatar: async (uri: string): Promise<UserProfileResponse> => {
+    const filename = uri.split('/').pop() ?? 'photo.jpg';
+    const extMatch = /\.(\w+)$/.exec(filename);
+    const ext = extMatch ? extMatch[1].toLowerCase() : 'jpg';
+    const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri,
+      name: filename,
+      type: mimeType,
+    } as unknown as Blob);
+
+    const { data } = await apiClient.post<UserProfileResponse>('/users/profile/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
+
+  deleteAvatar: async (): Promise<UserProfileResponse> => {
+    const { data } = await apiClient.delete<UserProfileResponse>('/users/profile/avatar');
+    return data;
+  },
 };
