@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.0.4](https://github.com/mehmettguzell/STOP/compare/v1.0.3...v1.0.4) (2026-08-05)
+
+
+### Bug Fixes
+
+* **ci:** grant contents:write to notify-deploy for repository_dispatch ([6305f99](https://github.com/mehmettguzell/STOP/commit/6305f99212617d812cd093871671edbc8b7c2ad5))
+* **ci:** pass gateway route env vars to the api-gateway smoke test, guard against overlapping builds ([c292626](https://github.com/mehmettguzell/STOP/commit/c292626a6a4a1957da73364afc90aa21be49ccf5))
+* **ci:** trigger deploy via repository_dispatch, fix api-gateway env-file crash ([d6bf44d](https://github.com/mehmettguzell/STOP/commit/d6bf44d30e1a98aca920e6855eb4daf128406c7f))
+* fix dockerfile ([bf7b833](https://github.com/mehmettguzell/STOP/commit/bf7b833ec2c874efbcea987f8086979ca7af7ab6))
+
 ## [1.0.3](https://github.com/mehmettguzell/STOP/compare/v1.0.2...v1.0.3) (2026-08-04)
 
 
