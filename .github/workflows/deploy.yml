@@ -157,10 +157,18 @@ jobs:
           SCRIPT_EOF
           )
 
+          # SSM concatenates every "commands" entry into ONE script file and
+          # picks the interpreter from that file's first line. Without a
+          # shebang it defaults to /bin/sh, which is dash on Amazon
+          # Linux/Ubuntu — dash rejects `set -o pipefail` (used inside
+          # REMOTE_SCRIPT) and aborts before anything runs, with no
+          # stdout/stderr captured. Putting "#!/bin/bash" as its own first
+          # array entry makes it the file's actual first line.
           PARAMS=$(jq -n \
             --arg compose_b64 "$COMPOSE_B64" \
             --arg script "$REMOTE_SCRIPT" \
             '{commands: [
+              "#!/bin/bash",
               "mkdir -p /opt/STOP",
               ("echo " + $compose_b64 + " | base64 -d > /opt/STOP/docker-compose.yml"),
               $script
