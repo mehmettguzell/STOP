@@ -2,6 +2,7 @@ package com.stop.identity_service.common.exception;
 
 import com.stop.identity_service.common.error.CommonErrorCode;
 import com.stop.identity_service.common.error.ErrorCode;
+import com.stop.identity_service.common.error.IdentityErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.net.URI;
@@ -128,6 +130,17 @@ public class GlobalExceptionHandler {
         pd.setProperty("code", CommonErrorCode.UNAUTHORIZED.getCode());
         pd.setInstance(URI.create(req.getRequestURI()));
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(pd);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ProblemDetail> handleMaxUploadSize(MaxUploadSizeExceededException ex, HttpServletRequest req) {
+        log.warn("Upload too large: {}", ex.getMessage());
+
+        ErrorCode errorCode = IdentityErrorCode.FILE_TOO_LARGE;
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(errorCode.getHttpStatus(), errorCode.getMessage());
+        pd.setProperty("code", errorCode.getCode());
+        pd.setInstance(URI.create(req.getRequestURI()));
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(pd);
     }
 
     @ExceptionHandler(DataAccessException.class)

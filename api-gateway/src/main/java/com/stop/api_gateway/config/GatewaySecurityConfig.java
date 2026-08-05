@@ -50,6 +50,7 @@ public class GatewaySecurityConfig {
                         ).permitAll()
                         .requestMatchers(HttpMethod.GET, "/oauth2/jwks").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/profile").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/profile/avatar/**").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         // Circuit breaker fallback — gateway iç endpoint'i, auth yok
                         .requestMatchers("/fallback/**").permitAll()
