@@ -914,6 +914,9 @@ export default function MatchDetailScreen({
                         ]}
                       >
                         {p.team === "HOME" ? "Ev" : "Dep"}
+                        {match?.whiteTeam
+                          ? ` · ${p.team === match.whiteTeam ? "Beyaz" : "Siyah"}`
+                          : ""}
                       </Text>
                     </View>
                   )}

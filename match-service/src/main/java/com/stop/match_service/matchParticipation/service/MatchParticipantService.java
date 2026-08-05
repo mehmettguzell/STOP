@@ -5,6 +5,7 @@ import com.stop.match_service.common.error.ParticipationErrorCode;
 import com.stop.match_service.common.exception.BusinessException;
 import com.stop.match_service.match.entity.Match;
 import com.stop.match_service.match.entity.Status;
+import com.stop.match_service.match.kafka.event.JerseyColorDecidedEvent;
 import com.stop.match_service.match.repository.MatchRepository;
 import com.stop.match_service.matchParticipation.dto.request.ParticipantRequestReq;
 import com.stop.match_service.matchParticipation.dto.request.RemoveParticipationReq;
@@ -29,10 +30,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -95,6 +99,11 @@ public class MatchParticipantService {
 
         validateAssignmentCoversAllParticipants(joined, req.assignments());
 
+        // Collectors.toMap rejects null values, and an unassigned participant's team is null
+        // (the common first-ever-assignment case) - a plain HashMap tolerates that fine.
+        Map<UUID, TeamType> previousTeams = new HashMap<>();
+        joined.forEach(p -> previousTeams.put(p.getUserId(), p.getTeam()));
+
         Map<UUID, TeamType> teamMap = req.assignments().stream()
                 .collect(Collectors.toMap(
                         TeamAssignmentReq.PlayerTeamEntry::userId,
@@ -109,7 +118,40 @@ public class MatchParticipantService {
                 req.assignments().stream().filter(e -> e.team() == TeamType.AWAY).count()
         );
 
+        boolean teamsActuallyChanged = joined.stream()
+                .anyMatch(p -> !Objects.equals(previousTeams.get(p.getUserId()), p.getTeam()));
+
+        if (teamsActuallyChanged) {
+            decideJerseyColors(match, joined);
+        }
+
         return joined.stream().map(this::toResponse).toList();
+    }
+
+    /**
+     * Forma rengi kurası: yalnızca gerçek bir takım değişikliği olduğunda çağrılır (bkz.
+     * assignTeams). Rastgele bir takımı beyaz olarak seçer, kararı maça kaydeder ve tüm
+     * katılımcılara (organizatör dahil - sonucu organizatör de bilmiyor) kendi takımlarının
+     * rengini bildiren bir olay yayınlar.
+     */
+    private void decideJerseyColors(Match match, List<MatchParticipant> joined) {
+        TeamType whiteTeam = ThreadLocalRandom.current().nextBoolean() ? TeamType.HOME : TeamType.AWAY;
+        match.setWhiteTeam(whiteTeam);
+
+        List<UUID> whiteTeamUserIds = joined.stream()
+                .filter(p -> p.getTeam() == whiteTeam)
+                .map(MatchParticipant::getUserId)
+                .toList();
+        List<UUID> blackTeamUserIds = joined.stream()
+                .filter(p -> p.getTeam() != whiteTeam)
+                .map(MatchParticipant::getUserId)
+                .toList();
+
+        eventPublisher.publishEvent(new JerseyColorDecidedEvent(
+                match.getId(), whiteTeamUserIds, blackTeamUserIds, Instant.now()
+        ));
+        log.info("Jersey colors decided. matchId={} whiteTeam={} white={} black={}",
+                match.getId(), whiteTeam, whiteTeamUserIds.size(), blackTeamUserIds.size());
     }
 
 

@@ -2,6 +2,7 @@ package com.stop.match_service.match.dto.response;
 
 import com.stop.match_service.match.entity.Status;
 import com.stop.match_service.match.entity.Visibility;
+import com.stop.match_service.matchParticipation.entity.TeamType;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -17,6 +18,7 @@ public record MatchResponse(
         UUID organizerId,
         Integer capacity,
         Integer participantCount,
-        LocalDateTime createdAt
+        LocalDateTime createdAt,
+        TeamType whiteTeam
 ) {
 }

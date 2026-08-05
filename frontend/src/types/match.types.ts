@@ -19,6 +19,7 @@ export interface MatchResponse {
   capacity: number;
   participantCount: number;
   createdAt: string;
+  whiteTeam: TeamType | null;
 }
 
 export interface MatchParticipantResponse {
