@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/mehmettguzell/STOP/compare/v1.0.6...v1.1.0) (2026-08-05)
+
+
+### Features
+
+* add profile photo upload, replace, and delete ([c5935ef](https://github.com/mehmettguzell/STOP/commit/c5935efcd7e11d66adb0c2c720d675e0b3ded010))
+* frontend/add-friend-positions-enum ([4727fe0](https://github.com/mehmettguzell/STOP/commit/4727fe0a316d4b4c831059743dcc0826011ffb2c))
+
 ## [1.0.6](https://github.com/mehmettguzell/STOP/compare/v1.0.5...v1.0.6) (2026-08-05)
 
 
