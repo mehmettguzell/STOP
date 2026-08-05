@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.1](https://github.com/mehmettguzell/STOP/compare/v1.1.0...v1.1.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* identity service lack of region env ([3a58613](https://github.com/mehmettguzell/STOP/commit/3a58613bfac827772c456eb26ae2ccc0f8bcac24))
+* identity service lack of region env ([ea63467](https://github.com/mehmettguzell/STOP/commit/ea6346744b4215880eb028c647df8ceaaeeb6f7d))
+
 ## [1.1.0](https://github.com/mehmettguzell/STOP/compare/v1.0.6...v1.1.0) (2026-08-05)
 
 
