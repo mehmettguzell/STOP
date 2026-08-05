@@ -1,0 +1,7 @@
+# GitHub Actions workflows embed shell heredocs that get executed verbatim
+# (locally, and on the deploy target via SSM). CRLF in that content breaks
+# shebang/interpreter detection and shell parsing, so force LF regardless of
+# the checkout machine's core.autocrlf.
+.github/** text eol=lf
+docker/** text eol=lf
+*.sh text eol=lf
