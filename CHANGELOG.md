@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.0.5](https://github.com/mehmettguzell/STOP/compare/v1.0.4...v1.0.5) (2026-08-05)
+
+
+### Bug Fixes
+
+* build and deploy actions ([6cbd088](https://github.com/mehmettguzell/STOP/commit/6cbd088f7791c3f4e779bf7972412eeb027fd05b))
+* deploy via ssm job ([fe88e7e](https://github.com/mehmettguzell/STOP/commit/fe88e7ec6f05839b06292394c8d07caac41c610e))
+* deploy via ssm job ([0cdce1f](https://github.com/mehmettguzell/STOP/commit/0cdce1f5b12c6b32b6dd5868ca1e685a0ea6e220))
+* docker time problem ([b8bd080](https://github.com/mehmettguzell/STOP/commit/b8bd080ad236218cae871fe7cfb96a2070a5d0f8))
+* docker-compose and push containers to ghcr ([2301d83](https://github.com/mehmettguzell/STOP/commit/2301d836267cc26f4add2cd11a961dba05ac1d75))
+* test actions ([bdc19d4](https://github.com/mehmettguzell/STOP/commit/bdc19d43e64031b2bd150e2bb06952bde266b378))
+* test actions ([daf6ff0](https://github.com/mehmettguzell/STOP/commit/daf6ff0788ae2dc46d335a9741d7497cea68caa7))
+* workflow actions ([1411611](https://github.com/mehmettguzell/STOP/commit/1411611827b210ba55472197a8e3aee506c0e2cd))
+
 ## [1.0.4](https://github.com/mehmettguzell/STOP/compare/v1.0.3...v1.0.4) (2026-08-05)
 
 
