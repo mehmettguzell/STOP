@@ -16,6 +16,7 @@ import { SearchScreenProps } from '../../navigation/types';
 import Input from '../../components/ui/Input';
 import Button from '../../components/ui/Button';
 import CityPicker from '../../components/ui/CityPicker';
+import PositionPicker from '../../components/ui/PositionPicker';
 import EmptyState from '../../components/ui/EmptyState';
 import Badge from '../../components/ui/Badge';
 import { Colors, Radius } from '../../theme/colors';
@@ -106,12 +107,7 @@ export default function SearchScreen({ navigation }: SearchScreenProps) {
       {showAdvanced && (
         <View style={styles.advancedPanel}>
           <CityPicker value={city} onSelect={setCity} />
-          <Input
-            label="Pozisyon"
-            placeholder="Forvet, Kaleci..."
-            value={position}
-            onChangeText={setPosition}
-          />
+          <PositionPicker value={position} onSelect={setPosition} />
 
           <Text style={styles.scoreGroupLabel}>Güven Skoru</Text>
           <View style={styles.scoreRow}>
