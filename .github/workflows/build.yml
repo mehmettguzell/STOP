@@ -6,9 +6,10 @@ name: Build
 
 on:
   push:
-    tags:
-      - "v*"
-  workflow_dispatch:
+    branches:
+      - main
+#    tags:
+#      - "v*"
 
 permissions:
   contents: read
