@@ -429,7 +429,8 @@ public class MatchService {
                 match.getOrganizerId(),
                 match.getCapacity(),
                 match.getParticipantCount(),
-                match.getCreatedAt()
+                match.getCreatedAt(),
+                match.getWhiteTeam()
         );
     }
 }

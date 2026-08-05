@@ -1,5 +1,6 @@
 package com.stop.match_service.match.entity;
 
+import com.stop.match_service.matchParticipation.entity.TeamType;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -80,6 +81,12 @@ public class Match {
     // TODO: bu columnu db ye ekle
     @Column(name = "rating_deadline")
     private LocalDateTime ratingDeadline;
+
+    // Forma rengi kurası: hangi takım beyaz giyecek. null = takımlar henüz atanmadı /
+    // forma rengi henüz karara bağlanmadı. Diğer takım (karşı taraf) daima siyahtır.
+    @Enumerated(EnumType.STRING)
+    @Column(name = "white_team", length = 20)
+    private TeamType whiteTeam;
 
 
     @PrePersist

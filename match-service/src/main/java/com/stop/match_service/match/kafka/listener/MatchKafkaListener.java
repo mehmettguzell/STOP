@@ -4,9 +4,11 @@ import com.stop.match_service.invitation.kafka.event.InvitationSentEvent;
 import com.stop.match_service.invitation.kafka.producer.InvitationSentProducer;
 import com.stop.match_service.match.kafka.event.MatchCancelledEvent;
 import com.stop.match_service.match.kafka.event.MatchCompletedEvent;
+import com.stop.match_service.match.kafka.event.JerseyColorDecidedEvent;
 import com.stop.match_service.match.kafka.event.MatchFinalizedEvent;
 import com.stop.match_service.match.kafka.event.MatchStartedEvent;
 import com.stop.match_service.match.kafka.event.MatchUpdatedEvent;
+import com.stop.match_service.match.kafka.producer.JerseyColorDecidedProducer;
 import com.stop.match_service.match.kafka.producer.MatchCancelledProducer;
 import com.stop.match_service.match.kafka.producer.MatchCompletedProducer;
 import com.stop.match_service.match.kafka.producer.MatchFinalizedProducer;
@@ -39,6 +41,7 @@ public class MatchKafkaListener {
     private final MatchCancelledProducer matchCancelledProducer;
     private final MatchUpdatedProducer matchUpdatedProducer;
     private final MatchFinalizedProducer matchFinalizedProducer;
+    private final JerseyColorDecidedProducer jerseyColorDecidedProducer;
     private final InvitationSentProducer invitationSentProducer;
     private final ParticipantJoinedProducer participantJoinedProducer;
     private final ParticipantLeftProducer participantLeftProducer;
@@ -66,6 +69,10 @@ public class MatchKafkaListener {
     @Async("kafkaEventExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onMatchFinalized(MatchFinalizedEvent event) { matchFinalizedProducer.publish(event); }
+
+    @Async("kafkaEventExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onJerseyColorDecided(JerseyColorDecidedEvent event) { jerseyColorDecidedProducer.publish(event); }
 
     @Async("kafkaEventExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
