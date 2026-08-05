@@ -14,6 +14,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -56,6 +57,17 @@ class AvatarStorageServiceTest {
         BufferedImage reencoded = ImageIO.read(savedFile.toFile());
         assertEquals(200, reencoded.getWidth());
         assertEquals(100, reencoded.getHeight());
+    }
+
+    @Test
+    void webpReader_isRegistered() {
+        // iPhones often save web-downloaded images as WebP; without a reader plugin on the
+        // classpath, ImageIO.read() silently returns null and every such upload is rejected
+        // as INVALID_IMAGE_FILE even though the file isn't corrupt.
+        boolean webpSupported = Arrays.stream(ImageIO.getReaderFormatNames())
+                .anyMatch(name -> name.equalsIgnoreCase("webp"));
+
+        assertTrue(webpSupported, "No WebP ImageIO reader registered on the classpath");
     }
 
     @Test
