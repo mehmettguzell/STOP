@@ -20,17 +20,13 @@ import DatePicker from '../../components/ui/DatePicker';
 import { Colors } from '../../theme/colors';
 import { DominantFoot } from '../../types/user.types';
 import { getErrorMessage } from '../../utils/error';
+import { POSITIONS } from '../../constants/positions';
 
 type FootOption = { label: string; value: DominantFoot };
 const FOOT_OPTIONS: FootOption[] = [
   { label: 'Sol', value: 'LEFT' },
   { label: 'Sağ', value: 'RIGHT' },
   { label: 'Her İkisi', value: 'BOTH' },
-];
-
-const POSITIONS = [
-  'Kaleci', 'Stoper', 'Sol Bek', 'Sağ Bek', 'Defansif OO',
-  'Merkez OO', 'Sol Kanat', 'Sağ Kanat', 'Forvet',
 ];
 
 const NAME_REGEX = /^[\p{L}\p{M}\s'.-]+$/u;
