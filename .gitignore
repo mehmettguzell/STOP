@@ -118,3 +118,8 @@ pnpm-debug.log*
 # JWT / RSA KEYS (env var ile geçilir)
 #######################################
 **/src/main/resources/keys/
+
+#######################################
+# SPEC-KIT (speckit-* komutlarinin ciktilari)
+#######################################
+specs/
