@@ -2,15 +2,12 @@ package com.stop.identity_service.userProfile.service.avatar;
 
 import com.stop.identity_service.common.error.IdentityErrorCode;
 import com.stop.identity_service.common.exception.BusinessException;
-import com.stop.identity_service.config.aws.AwsProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import javax.imageio.ImageIO;
 import java.awt.Color;
@@ -18,61 +15,80 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.UUID;
 
 /**
- * Validates, re-encodes, and stores profile photos in S3. Re-encoding (decode -> fixed max
- * dimension -> re-save as JPEG) is the primary defense against disguised/polyglot uploads: the
- * output is always genuine, normalized image data regardless of what was submitted.
+ * Validates, re-encodes, and stores profile photos on local disk (a mounted volume). Re-encoding
+ * (decode -> fixed max dimension -> re-save as JPEG) is the primary defense against
+ * disguised/polyglot uploads: the output is always genuine, normalized image data regardless of
+ * what was submitted. Filenames are always a freshly generated UUID - never derived from user
+ * input - so path traversal isn't reachable through this class or the read-back endpoint.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@EnableConfigurationProperties(AvatarStorageProperties.class)
 public class AvatarStorageService {
 
     private static final int MAX_DIMENSION = 1024;
-    private static final String KEY_PREFIX = "avatars/";
 
-    private final S3Client s3Client;
-    private final AwsProperties awsProperties;
+    private final AvatarStorageProperties properties;
 
     public String uploadAvatar(byte[] originalBytes) {
         BufferedImage decoded = decode(originalBytes);
         BufferedImage normalized = normalize(decoded);
-        byte[] jpegBytes = encodeAsJpeg(normalized);
 
-        String key = KEY_PREFIX + UUID.randomUUID() + ".jpg";
-        // Bucket must allow object ACLs (Object Ownership != "Bucket owner enforced") for this
-        // public-read grant to take effect - see contracts/avatar-storage.contract.md.
-        s3Client.putObject(
-                PutObjectRequest.builder()
-                        .bucket(awsProperties.s3().bucket())
-                        .key(key)
-                        .contentType("image/jpeg")
-                        .acl(ObjectCannedACL.PUBLIC_READ)
-                        .build(),
-                RequestBody.fromBytes(jpegBytes)
-        );
+        String filename = UUID.randomUUID() + ".jpg";
+        Path directory = Path.of(properties.directory());
+        Path target = directory.resolve(filename);
 
-        String url = String.format(
-                "https://%s.s3.%s.amazonaws.com/%s",
-                awsProperties.s3().bucket(), awsProperties.region(), key
-        );
-        log.info("Avatar uploaded key={}", key);
-        return url;
+        try {
+            Files.createDirectories(directory);
+            Path tempFile = Files.createTempFile(directory, "upload-", ".tmp");
+            try {
+                if (!ImageIO.write(normalized, "jpg", tempFile.toFile())) {
+                    throw new BusinessException(IdentityErrorCode.INVALID_IMAGE_FILE);
+                }
+                // Atomic rename within the same directory/filesystem - a reader can never
+                // observe a partially-written file under the final name.
+                Files.move(tempFile, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } finally {
+                Files.deleteIfExists(tempFile);
+            }
+        } catch (IOException e) {
+            throw new BusinessException(IdentityErrorCode.INVALID_IMAGE_FILE);
+        }
+
+        log.info("Avatar saved file={}", filename);
+        return properties.publicBaseUrl() + "/users/profile/avatar/" + filename;
     }
 
-    /** Deletes the S3 object referenced by a previously-returned avatar URL. Propagates S3 failures - callers decide whether that should block their operation. */
+    /** Deletes the file referenced by a previously-returned avatar URL. Propagates IO failures - callers decide whether that should block their operation. */
     public void deleteObject(String avatarUrl) {
-        String key = extractKey(avatarUrl);
-        s3Client.deleteObject(DeleteObjectRequest.builder()
-                .bucket(awsProperties.s3().bucket())
-                .key(key)
-                .build());
-        log.info("Avatar deleted key={}", key);
+        String filename = validateAndNormalizeFilename(extractFilename(avatarUrl));
+        Path target = Path.of(properties.directory()).resolve(filename);
+        try {
+            Files.deleteIfExists(target);
+            log.info("Avatar deleted file={}", filename);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to delete avatar file " + filename, e);
+        }
+    }
+
+    /** Loads a previously-uploaded avatar for serving. Filename MUST be validated as our own UUID format before it ever touches the filesystem. */
+    public Resource loadAvatar(String filename) {
+        String safeFilename = validateAndNormalizeFilename(filename);
+        Path target = Path.of(properties.directory()).resolve(safeFilename);
+        Resource resource = new FileSystemResource(target);
+        if (!resource.exists() || !resource.isReadable()) {
+            throw new BusinessException(IdentityErrorCode.AVATAR_NOT_FOUND);
+        }
+        return resource;
     }
 
     private BufferedImage decode(byte[] bytes) {
@@ -108,20 +124,28 @@ public class AvatarStorageService {
         return normalized;
     }
 
-    private byte[] encodeAsJpeg(BufferedImage image) {
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            if (!ImageIO.write(image, "jpg", out)) {
-                throw new BusinessException(IdentityErrorCode.INVALID_IMAGE_FILE);
-            }
-            return out.toByteArray();
-        } catch (IOException e) {
-            throw new BusinessException(IdentityErrorCode.INVALID_IMAGE_FILE);
-        }
+    private String extractFilename(String avatarUrl) {
+        String path = URI.create(avatarUrl).getPath();
+        int idx = path.lastIndexOf('/');
+        return idx >= 0 ? path.substring(idx + 1) : path;
     }
 
-    private String extractKey(String avatarUrl) {
-        String path = URI.create(avatarUrl).getPath();
-        return path.startsWith("/") ? path.substring(1) : path;
+    /**
+     * Rejects anything that isn't exactly "<valid-uuid>.jpg" - the only shape this class ever
+     * generates. This is what makes {@link #loadAvatar} and {@link #deleteObject} safe to build a
+     * filesystem path from a value that ultimately came from an HTTP path segment: a traversal
+     * payload like "../../etc/passwd" can never pass UUID.fromString and never reaches Path.resolve.
+     */
+    private String validateAndNormalizeFilename(String filename) {
+        if (filename == null || !filename.endsWith(".jpg")) {
+            throw new BusinessException(IdentityErrorCode.AVATAR_NOT_FOUND);
+        }
+        String uuidPart = filename.substring(0, filename.length() - 4);
+        try {
+            UUID.fromString(uuidPart);
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(IdentityErrorCode.AVATAR_NOT_FOUND);
+        }
+        return uuidPart + ".jpg";
     }
 }

@@ -57,7 +57,7 @@ class UserProfileServiceTest {
         UUID userId = UUID.randomUUID();
         UserProfile profile = profileWithAvatar(userId, null);
         when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
-        when(avatarStorageService.uploadAvatar(any())).thenReturn("https://bucket.s3.eu-central-1.amazonaws.com/avatars/new.jpg");
+        when(avatarStorageService.uploadAvatar(any())).thenReturn("http://localhost:8080/api/v1/users/profile/avatar/new.jpg");
         when(userProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         userProfileService.updateAvatar(userId, new byte[]{1, 2, 3});
@@ -68,10 +68,10 @@ class UserProfileServiceTest {
     @Test
     void updateAvatar_existingPhoto_deletesPreviousObject() {
         UUID userId = UUID.randomUUID();
-        String oldUrl = "https://bucket.s3.eu-central-1.amazonaws.com/avatars/old.jpg";
+        String oldUrl = "http://localhost:8080/api/v1/users/profile/avatar/old.jpg";
         UserProfile profile = profileWithAvatar(userId, oldUrl);
         when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
-        when(avatarStorageService.uploadAvatar(any())).thenReturn("https://bucket.s3.eu-central-1.amazonaws.com/avatars/new.jpg");
+        when(avatarStorageService.uploadAvatar(any())).thenReturn("http://localhost:8080/api/v1/users/profile/avatar/new.jpg");
         when(userProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         userProfileService.updateAvatar(userId, new byte[]{1, 2, 3});
@@ -82,12 +82,12 @@ class UserProfileServiceTest {
     @Test
     void updateAvatar_oldObjectDeleteFails_doesNotFailTheUpload() {
         UUID userId = UUID.randomUUID();
-        String oldUrl = "https://bucket.s3.eu-central-1.amazonaws.com/avatars/old.jpg";
+        String oldUrl = "http://localhost:8080/api/v1/users/profile/avatar/old.jpg";
         UserProfile profile = profileWithAvatar(userId, oldUrl);
         when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
-        when(avatarStorageService.uploadAvatar(any())).thenReturn("https://bucket.s3.eu-central-1.amazonaws.com/avatars/new.jpg");
+        when(avatarStorageService.uploadAvatar(any())).thenReturn("http://localhost:8080/api/v1/users/profile/avatar/new.jpg");
         when(userProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        org.mockito.Mockito.doThrow(new RuntimeException("s3 unavailable"))
+        org.mockito.Mockito.doThrow(new RuntimeException("disk unavailable"))
                 .when(avatarStorageService).deleteObject(eq(oldUrl));
 
         userProfileService.updateAvatar(userId, new byte[]{1, 2, 3});
@@ -98,7 +98,7 @@ class UserProfileServiceTest {
     @Test
     void deleteAvatar_existingPhoto_deletesObjectAndClearsUrl() {
         UUID userId = UUID.randomUUID();
-        String url = "https://bucket.s3.eu-central-1.amazonaws.com/avatars/current.jpg";
+        String url = "http://localhost:8080/api/v1/users/profile/avatar/current.jpg";
         UserProfile profile = profileWithAvatar(userId, url);
         when(userProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
         when(userProfileRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));

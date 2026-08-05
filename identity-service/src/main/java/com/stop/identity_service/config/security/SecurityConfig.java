@@ -86,7 +86,8 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 org.springframework.http.HttpMethod.GET,
-                                "/api/v1/users/profile"
+                                "/api/v1/users/profile",
+                                "/api/v1/users/profile/avatar/**"
                         ).permitAll()
 
                         .requestMatchers("/api/v1/admin/**")

@@ -2,42 +2,38 @@ package com.stop.identity_service.service;
 
 import com.stop.identity_service.common.error.IdentityErrorCode;
 import com.stop.identity_service.common.exception.BusinessException;
-import com.stop.identity_service.config.aws.AwsProperties;
+import com.stop.identity_service.userProfile.service.avatar.AvatarStorageProperties;
 import com.stop.identity_service.userProfile.service.avatar.AvatarStorageService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import software.amazon.awssdk.core.sync.RequestBody;
-import software.amazon.awssdk.services.s3.S3Client;
-import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
-import software.amazon.awssdk.services.s3.model.DeleteObjectResponse;
-import software.amazon.awssdk.services.s3.model.PutObjectRequest;
-import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import org.junit.jupiter.api.io.TempDir;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
 class AvatarStorageServiceTest {
 
-    @Mock
-    private S3Client s3Client;
-
-    private final AwsProperties awsProperties =
-            new AwsProperties("eu-central-1", new AwsProperties.S3("test-bucket"));
+    @TempDir
+    Path tempDir;
 
     private AvatarStorageService service;
+
+    @BeforeEach
+    void setUp() {
+        AvatarStorageProperties properties = new AvatarStorageProperties(
+                tempDir.toString(), "http://localhost:8080/api/v1"
+        );
+        service = new AvatarStorageService(properties);
+    }
 
     private byte[] pngBytes(int width, int height) throws IOException {
         BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
@@ -47,25 +43,23 @@ class AvatarStorageServiceTest {
     }
 
     @Test
-    void uploadAvatar_validImage_uploadsAndReturnsUrl() throws IOException {
-        service = new AvatarStorageService(s3Client, awsProperties);
-        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
-                .thenReturn(PutObjectResponse.builder().build());
-
+    void uploadAvatar_validImage_savesFileAndReturnsUrl() throws IOException {
         String url = service.uploadAvatar(pngBytes(200, 100));
 
-        assertTrue(url.startsWith("https://test-bucket.s3.eu-central-1.amazonaws.com/avatars/"));
+        assertTrue(url.startsWith("http://localhost:8080/api/v1/users/profile/avatar/"));
         assertTrue(url.endsWith(".jpg"));
 
-        ArgumentCaptor<PutObjectRequest> requestCaptor = ArgumentCaptor.forClass(PutObjectRequest.class);
-        verify(s3Client).putObject(requestCaptor.capture(), any(RequestBody.class));
-        assertEquals("test-bucket", requestCaptor.getValue().bucket());
-        assertEquals("image/jpeg", requestCaptor.getValue().contentType());
+        String filename = url.substring(url.lastIndexOf('/') + 1);
+        Path savedFile = tempDir.resolve(filename);
+        assertTrue(Files.exists(savedFile));
+        // Saved bytes must be genuine, re-encoded JPEG - not the original PNG bytes.
+        BufferedImage reencoded = ImageIO.read(savedFile.toFile());
+        assertEquals(200, reencoded.getWidth());
+        assertEquals(100, reencoded.getHeight());
     }
 
     @Test
     void uploadAvatar_corruptBytes_throwsInvalidImageFile() {
-        service = new AvatarStorageService(s3Client, awsProperties);
         byte[] garbage = new byte[]{1, 2, 3, 4, 5};
 
         BusinessException ex = assertThrows(BusinessException.class, () -> service.uploadAvatar(garbage));
@@ -74,31 +68,50 @@ class AvatarStorageServiceTest {
     }
 
     @Test
-    void uploadAvatar_oversizedImage_isDownscaledBeforeUpload() throws IOException {
-        service = new AvatarStorageService(s3Client, awsProperties);
-        when(s3Client.putObject(any(PutObjectRequest.class), any(RequestBody.class)))
-                .thenReturn(PutObjectResponse.builder().build());
+    void uploadAvatar_oversizedImage_isDownscaledBeforeSaving() throws IOException {
+        String url = service.uploadAvatar(pngBytes(2000, 1000));
 
-        ArgumentCaptor<RequestBody> bodyCaptor = ArgumentCaptor.forClass(RequestBody.class);
-        service.uploadAvatar(pngBytes(2000, 1000));
-
-        verify(s3Client).putObject(any(PutObjectRequest.class), bodyCaptor.capture());
-        BufferedImage reencoded = ImageIO.read(bodyCaptor.getValue().contentStreamProvider().newStream());
+        String filename = url.substring(url.lastIndexOf('/') + 1);
+        BufferedImage reencoded = ImageIO.read(tempDir.resolve(filename).toFile());
         assertEquals(1024, reencoded.getWidth());
         assertEquals(512, reencoded.getHeight());
     }
 
     @Test
-    void deleteObject_issuesDeleteWithKeyFromUrl() {
-        service = new AvatarStorageService(s3Client, awsProperties);
-        when(s3Client.deleteObject(any(DeleteObjectRequest.class)))
-                .thenReturn(DeleteObjectResponse.builder().build());
+    void deleteObject_removesTheFileReferencedByUrl() throws IOException {
+        String url = service.uploadAvatar(pngBytes(200, 100));
+        String filename = url.substring(url.lastIndexOf('/') + 1);
+        assertTrue(Files.exists(tempDir.resolve(filename)));
 
-        service.deleteObject("https://test-bucket.s3.eu-central-1.amazonaws.com/avatars/abc-123.jpg");
+        service.deleteObject(url);
 
-        ArgumentCaptor<DeleteObjectRequest> requestCaptor = ArgumentCaptor.forClass(DeleteObjectRequest.class);
-        verify(s3Client).deleteObject(requestCaptor.capture());
-        assertEquals("test-bucket", requestCaptor.getValue().bucket());
-        assertEquals("avatars/abc-123.jpg", requestCaptor.getValue().key());
+        assertFalse(Files.exists(tempDir.resolve(filename)));
+    }
+
+    @Test
+    void loadAvatar_existingFile_returnsReadableResource() throws IOException {
+        String url = service.uploadAvatar(pngBytes(200, 100));
+        String filename = url.substring(url.lastIndexOf('/') + 1);
+
+        var resource = service.loadAvatar(filename);
+
+        assertTrue(resource.exists());
+        assertTrue(resource.isReadable());
+    }
+
+    @Test
+    void loadAvatar_pathTraversalAttempt_isRejectedNotResolved() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.loadAvatar("../../../../etc/passwd"));
+
+        assertEquals(IdentityErrorCode.AVATAR_NOT_FOUND, ex.getErrorCode());
+    }
+
+    @Test
+    void loadAvatar_nonExistentButWellFormedFilename_throwsNotFound() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> service.loadAvatar("00000000-0000-0000-0000-000000000000.jpg"));
+
+        assertEquals(IdentityErrorCode.AVATAR_NOT_FOUND, ex.getErrorCode());
     }
 }

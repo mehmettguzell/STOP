@@ -122,6 +122,12 @@ public enum IdentityErrorCode implements ErrorCode {
             "FILE_TOO_LARGE",
             "Dosya boyutu izin verilen sınırı asiyor.",
             HttpStatus.BAD_REQUEST
+    ),
+
+    AVATAR_NOT_FOUND(
+            "AVATAR_NOT_FOUND",
+            "Profil fotoğrafı bulunamadı.",
+            HttpStatus.NOT_FOUND
     );
 
 
