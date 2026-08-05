@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.6](https://github.com/mehmettguzell/STOP/compare/v1.0.5...v1.0.6) (2026-08-05)
+
+
+### Bug Fixes
+
+* add websocket port to docker compose ([ba4bd8d](https://github.com/mehmettguzell/STOP/commit/ba4bd8deaf37ee25106d8964fa3d6a0f2f70da69))
+
 ## [1.0.5](https://github.com/mehmettguzell/STOP/compare/v1.0.4...v1.0.5) (2026-08-05)
 
 
