@@ -35,6 +35,7 @@ import { useAuthStore } from "../../store/auth.store";
 import Button from "../../components/ui/Button";
 import Card from "../../components/ui/Card";
 import Badge from "../../components/ui/Badge";
+import Avatar from "../../components/ui/Avatar";
 import FieldVisualization from "../../components/ui/FieldVisualization";
 import { Colors, Radius, Shadows } from "../../theme/colors";
 import { getErrorMessage } from "../../utils/error";
@@ -76,6 +77,7 @@ export default function MatchDetailScreen({
   const [myRequest, setMyRequest] =
     useState<ParticipationRequestResponse | null>(null);
   const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
+  const [avatarUrls, setAvatarUrls] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [hasRated, setHasRated] = useState(rated ?? false);
   const [refreshing, setRefreshing] = useState(false);
@@ -88,7 +90,9 @@ export default function MatchDetailScreen({
   const [inviteResults, setInviteResults] = useState<UserSelfResponse[]>([]);
   const [inviteSearchLoading, setInviteSearchLoading] = useState(false);
   const [sentInvites, setSentInvites] = useState<Set<string>>(new Set());
-  const [friends, setFriends] = useState<{ id: string; displayName: string }[]>([]);
+  const [friends, setFriends] = useState<
+    { id: string; displayName: string; avatarUrl: string | null }[]
+  >([]);
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [homeScore, setHomeScore] = useState("0");
   const [awayScore, setAwayScore] = useState("0");
@@ -136,18 +140,24 @@ export default function MatchDetailScreen({
       match.status === "FULL");
 
   const fetchDisplayNames = useCallback(async (userIds: string[]) => {
+    const uniqueIds = Array.from(new Set(userIds));
     const names: Record<string, string> = {};
-    await Promise.all(
-      userIds.map(async (uid) => {
-        try {
-          const user = await userApi.getUser(uid);
-          names[uid] = user.displayName;
-        } catch {
-          names[uid] = uid.substring(0, 8) + "...";
-        }
-      }),
-    );
+    const avatars: Record<string, string | null> = {};
+    try {
+      const users = await userApi.getUsersByIds(uniqueIds);
+      const userMap = new Map(users.map((u) => [u.id, u]));
+      uniqueIds.forEach((uid) => {
+        const user = userMap.get(uid);
+        names[uid] = user?.displayName ?? uid.substring(0, 8) + "...";
+        avatars[uid] = user?.avatarUrl ?? null;
+      });
+    } catch {
+      uniqueIds.forEach((uid) => {
+        names[uid] = uid.substring(0, 8) + "...";
+      });
+    }
     setDisplayNames((prev) => ({ ...prev, ...names }));
+    setAvatarUrls((prev) => ({ ...prev, ...avatars }));
   }, []);
 
   const fetchData = useCallback(async () => {
@@ -520,20 +530,17 @@ export default function MatchDetailScreen({
       const participantIds = new Set(participants.map((p) => p.userId));
       participantIds.add(currentUserId ?? "");
 
-      const friendEntries = await Promise.all(
-        friendships
-          .map((f) => (f.requesterId === currentUserId ? f.receiverId : f.requesterId))
-          .filter((id) => !participantIds.has(id))
-          .map(async (id) => {
-            try {
-              const user = await userApi.getUser(id);
-              return { id, displayName: user.displayName };
-            } catch {
-              return null;
-            }
-          }),
+      const candidateIds = Array.from(
+        new Set(
+          friendships
+            .map((f) => (f.requesterId === currentUserId ? f.receiverId : f.requesterId))
+            .filter((id) => !participantIds.has(id)),
+        ),
       );
-      setFriends(friendEntries.filter(Boolean) as { id: string; displayName: string }[]);
+      const users = candidateIds.length ? await userApi.getUsersByIds(candidateIds) : [];
+      setFriends(
+        users.map((u) => ({ id: u.id, displayName: u.displayName, avatarUrl: u.avatarUrl })),
+      );
     } catch {
       setFriends([]);
     } finally {
@@ -777,7 +784,6 @@ export default function MatchDetailScreen({
                   const name =
                     displayNames[req.userID] ||
                     req.userID.substring(0, 8) + "...";
-                  const initial = name.charAt(0).toUpperCase();
                   return (
                     <View
                       key={req.id}
@@ -792,11 +798,15 @@ export default function MatchDetailScreen({
                         onPress={() => navigateToProfile(req.userID)}
                         activeOpacity={0.7}
                       >
-                        <View style={styles.participantAvatar}>
-                          <Text style={styles.participantInitial}>
-                            {initial}
-                          </Text>
-                        </View>
+                        <Avatar
+                          uri={avatarUrls[req.userID]}
+                          name={name}
+                          size={42}
+                          style={styles.participantAvatar}
+                          backgroundColor={Colors.surfaceElevated}
+                          borderWidth={0}
+                          textColor={Colors.text}
+                        />
                         <Text style={styles.participantName}>{name}</Text>
                       </TouchableOpacity>
                       <View style={styles.requestActions}>
@@ -851,7 +861,6 @@ export default function MatchDetailScreen({
           ) : (
             participants.map((p, i) => {
               const name = getParticipantName(p.userId);
-              const initial = name.charAt(0).toUpperCase();
               const isMe = p.userId === currentUserId;
               const isMatchOrganizer = p.userId === match.organizerId;
 
@@ -865,18 +874,21 @@ export default function MatchDetailScreen({
                   onPress={() => navigateToProfile(p.userId)}
                   activeOpacity={0.7}
                 >
-                  <View
-                    style={[
-                      styles.participantAvatar,
-                      isMatchOrganizer && styles.organizerAvatar,
-                    ]}
-                  >
-                    {isMatchOrganizer ? (
+                  {isMatchOrganizer ? (
+                    <View style={[styles.participantAvatar, styles.organizerAvatar]}>
                       <Text style={styles.participantAvatarText}>👑</Text>
-                    ) : (
-                      <Text style={styles.participantInitial}>{initial}</Text>
-                    )}
-                  </View>
+                    </View>
+                  ) : (
+                    <Avatar
+                      uri={avatarUrls[p.userId]}
+                      name={name}
+                      size={42}
+                      style={styles.participantAvatar}
+                      backgroundColor={Colors.surfaceElevated}
+                      borderWidth={0}
+                      textColor={Colors.text}
+                    />
+                  )}
                   <View style={styles.participantInfo}>
                     <Text style={styles.participantName}>
                       {name}
@@ -1088,7 +1100,6 @@ export default function MatchDetailScreen({
             >
               {otherParticipants.map((p, i) => {
                 const name = getParticipantName(p.userId);
-                const initial = name.charAt(0).toUpperCase();
                 return (
                   <TouchableOpacity
                     key={p.participantId}
@@ -1100,9 +1111,15 @@ export default function MatchDetailScreen({
                     onPress={() => handleTransferOrganizer(p.userId)}
                     activeOpacity={0.7}
                   >
-                    <View style={styles.participantAvatar}>
-                      <Text style={styles.participantInitial}>{initial}</Text>
-                    </View>
+                    <Avatar
+                      uri={avatarUrls[p.userId]}
+                      name={name}
+                      size={42}
+                      style={styles.participantAvatar}
+                      backgroundColor={Colors.surfaceElevated}
+                      borderWidth={0}
+                      textColor={Colors.text}
+                    />
                     <Text style={styles.participantName}>{name}</Text>
                     <Text style={styles.chevron}>›</Text>
                   </TouchableOpacity>
@@ -1220,7 +1237,6 @@ export default function MatchDetailScreen({
                   ) : (
                     friends.map((friend, i) => {
                       const alreadySent = sentInvites.has(friend.id);
-                      const initial = (friend.displayName ?? "?").charAt(0).toUpperCase();
                       return (
                         <View
                           key={friend.id}
@@ -1229,9 +1245,15 @@ export default function MatchDetailScreen({
                             i < friends.length - 1 && styles.participantBorder,
                           ]}
                         >
-                          <View style={styles.participantAvatar}>
-                            <Text style={styles.participantInitial}>{initial}</Text>
-                          </View>
+                          <Avatar
+                            uri={friend.avatarUrl}
+                            name={friend.displayName}
+                            size={42}
+                            style={styles.participantAvatar}
+                            backgroundColor={Colors.surfaceElevated}
+                            borderWidth={0}
+                            textColor={Colors.text}
+                          />
                           <View style={{ flex: 1 }}>
                             <Text style={styles.participantName}>{friend.displayName}</Text>
                           </View>
@@ -1263,7 +1285,6 @@ export default function MatchDetailScreen({
                   )}
                   {inviteResults.map((user, i) => {
                     const alreadySent = sentInvites.has(user.id);
-                    const initial = (user.displayName ?? "?").charAt(0).toUpperCase();
                     return (
                       <View
                         key={user.id}
@@ -1272,9 +1293,15 @@ export default function MatchDetailScreen({
                           i < inviteResults.length - 1 && styles.participantBorder,
                         ]}
                       >
-                        <View style={styles.participantAvatar}>
-                          <Text style={styles.participantInitial}>{initial}</Text>
-                        </View>
+                        <Avatar
+                          uri={user.avatarUrl}
+                          name={user.displayName}
+                          size={42}
+                          style={styles.participantAvatar}
+                          backgroundColor={Colors.surfaceElevated}
+                          borderWidth={0}
+                          textColor={Colors.text}
+                        />
                         <View style={{ flex: 1 }}>
                           <Text style={styles.participantName}>{user.displayName}</Text>
                         </View>
@@ -1345,6 +1372,7 @@ export default function MatchDetailScreen({
                 )}
                 onPlayerPress={(userId) => toggleTeam(userId)}
                 getName={getParticipantName}
+                getAvatarUrl={(userId) => avatarUrls[userId]}
               />
               <View style={styles.vsBetween}>
                 <Text style={styles.vsBetweenText}>VS</Text>
@@ -1359,6 +1387,7 @@ export default function MatchDetailScreen({
                 )}
                 onPlayerPress={(userId) => toggleTeam(userId)}
                 getName={getParticipantName}
+                getAvatarUrl={(userId) => avatarUrls[userId]}
               />
             </View>
 
@@ -1395,6 +1424,7 @@ function TeamColumn({
   players,
   onPlayerPress,
   getName,
+  getAvatarUrl,
 }: {
   title: string;
   color: string;
@@ -1403,6 +1433,7 @@ function TeamColumn({
   players: MatchParticipantResponse[];
   onPlayerPress: (userId: string) => void;
   getName: (userId: string) => string;
+  getAvatarUrl: (userId: string) => string | null | undefined;
 }) {
   return (
     <View
@@ -1429,7 +1460,6 @@ function TeamColumn({
         ) : (
           players.map((p) => {
             const name = getName(p.userId);
-            const initial = name.charAt(0).toUpperCase();
             return (
               <TouchableOpacity
                 key={p.participantId}
@@ -1437,11 +1467,16 @@ function TeamColumn({
                 onPress={() => onPlayerPress(p.userId)} // Tüm kart takımı değiştirir
                 activeOpacity={0.7}
               >
-                <View
-                  style={[teamColStyles.avatar, { backgroundColor: color }]}
-                >
-                  <Text style={teamColStyles.avatarText}>{initial}</Text>
-                </View>
+                <Avatar
+                  uri={getAvatarUrl(p.userId)}
+                  name={name}
+                  size={32}
+                  style={teamColStyles.avatar}
+                  backgroundColor={color}
+                  borderWidth={0}
+                  textColor={Colors.textInverse}
+                  textStyle={{ fontSize: 13 }}
+                />
                 <Text style={teamColStyles.name} numberOfLines={1}>
                   {name}
                 </Text>
@@ -1603,11 +1638,6 @@ const styles = StyleSheet.create({
     borderColor: Colors.primary,
   },
   participantAvatarText: { fontSize: 18 },
-  participantInitial: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: Colors.text,
-  },
   participantInfo: { flex: 1 },
   participantName: { fontSize: 14, fontWeight: "600", color: Colors.text },
   organizerTag: {
@@ -1925,11 +1955,6 @@ const teamColStyles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-  },
-  avatarText: {
-    fontSize: 13,
-    fontWeight: "800",
-    color: Colors.textInverse,
   },
   name: {
     flex: 1,

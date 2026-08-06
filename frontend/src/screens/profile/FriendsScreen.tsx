@@ -19,6 +19,7 @@ import { useAuthStore } from "../../store/auth.store";
 import { extractErrorMessage } from "../../types/api.types";
 import { FriendsStackParamList } from "../../navigation/types";
 import EmptyState from "../../components/ui/EmptyState";
+import Avatar from "../../components/ui/Avatar";
 import { Colors, Radius, Shadows } from "../../theme/colors";
 
 type Tab = "friends" | "incoming" | "outgoing";
@@ -27,6 +28,7 @@ type FriendEntry = {
   friendshipId: string;
   otherUserId: string;
   displayName: string;
+  avatarUrl: string | null;
 };
 
 type Nav = NativeStackNavigationProp<FriendsStackParamList>;
@@ -43,26 +45,6 @@ export default function FriendsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
 
-  const resolveEntries = useCallback(
-    async (
-      list: FriendshipResponse[],
-      iAmRequester: boolean,
-    ): Promise<FriendEntry[]> => {
-      return Promise.all(
-        list.map(async (f) => {
-          const otherUserId = iAmRequester ? f.receiverId : f.requesterId;
-          let displayName = otherUserId.slice(0, 8);
-          try {
-            const user = await userApi.getUser(otherUserId);
-            displayName = user.displayName;
-          } catch {}
-          return { friendshipId: f.id, otherUserId, displayName };
-        }),
-      );
-    },
-    [],
-  );
-
   const load = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true);
@@ -73,26 +55,31 @@ export default function FriendsScreen() {
           friendshipApi.getOutgoing(),
         ]);
 
-        const [friendsRes, incomingRes, outgoingRes] = await Promise.all([
-          Promise.all(
-            friendsRaw.map(async (f) => {
-              const otherUserId =
-                f.requesterId === currentUserId ? f.receiverId : f.requesterId;
-              let displayName = otherUserId.slice(0, 8);
-              try {
-                const user = await userApi.getUser(otherUserId);
-                displayName = user.displayName;
-              } catch {}
-              return { friendshipId: f.id, otherUserId, displayName };
-            }),
-          ),
-          resolveEntries(incomingRaw, false),
-          resolveEntries(outgoingRaw, true),
-        ]);
+        const friendIds = friendsRaw.map((f) =>
+          f.requesterId === currentUserId ? f.receiverId : f.requesterId,
+        );
+        const incomingIds = incomingRaw.map((f) => f.requesterId);
+        const outgoingIds = outgoingRaw.map((f) => f.receiverId);
 
-        setFriends(friendsRes);
-        setIncoming(incomingRes);
-        setOutgoing(outgoingRes);
+        const allIds = Array.from(
+          new Set([...friendIds, ...incomingIds, ...outgoingIds]),
+        );
+        const users = allIds.length ? await userApi.getUsersByIds(allIds) : [];
+        const userMap = new Map(users.map((u) => [u.id, u]));
+
+        const toEntry = (f: FriendshipResponse, otherUserId: string): FriendEntry => {
+          const user = userMap.get(otherUserId);
+          return {
+            friendshipId: f.id,
+            otherUserId,
+            displayName: user?.displayName ?? otherUserId.slice(0, 8),
+            avatarUrl: user?.avatarUrl ?? null,
+          };
+        };
+
+        setFriends(friendsRaw.map((f, i) => toEntry(f, friendIds[i])));
+        setIncoming(incomingRaw.map((f, i) => toEntry(f, incomingIds[i])));
+        setOutgoing(outgoingRaw.map((f, i) => toEntry(f, outgoingIds[i])));
       } catch (e) {
         Alert.alert("Hata", extractErrorMessage(e));
       } finally {
@@ -100,7 +87,7 @@ export default function FriendsScreen() {
         setRefreshing(false);
       }
     },
-    [currentUserId, resolveEntries],
+    [currentUserId],
   );
 
   useEffect(() => {
@@ -220,7 +207,6 @@ export default function FriendsScreen() {
         : outgoing;
 
   const renderItem = ({ item }: { item: FriendEntry }) => {
-    const initial = item.displayName.charAt(0).toUpperCase();
     const busy = actionId === item.friendshipId;
 
     return (
@@ -230,9 +216,7 @@ export default function FriendsScreen() {
           onPress={() => handleOpenProfile(item.otherUserId)}
           activeOpacity={0.7}
         >
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initial}</Text>
-          </View>
+          <Avatar uri={item.avatarUrl} name={item.displayName} size={44} />
           <Text style={styles.name} numberOfLines={1}>
             {item.displayName}
           </Text>
@@ -539,17 +523,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 12,
   },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primaryGlow,
-    borderWidth: 1,
-    borderColor: Colors.primaryBorder,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 17, fontWeight: "800", color: Colors.primary },
   name: {
     flex: 1,
     fontSize: 15,

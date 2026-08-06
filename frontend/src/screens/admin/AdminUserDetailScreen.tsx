@@ -15,6 +15,7 @@ import { AdminUserDetailScreenProps } from '../../navigation/types';
 import Card from '../../components/ui/Card';
 import ScoreBadge from '../../components/ui/ScoreBadge';
 import Button from '../../components/ui/Button';
+import Avatar from '../../components/ui/Avatar';
 import { Colors } from '../../theme/colors';
 import { getErrorMessage } from '../../utils/error';
 
@@ -115,11 +116,17 @@ export default function AdminUserDetailScreen({
       >
         {/* Header */}
         <View style={styles.hero}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>
-              {user.displayName.charAt(0).toUpperCase()}
-            </Text>
-          </View>
+          <Avatar
+            uri={profile?.avatarUrl}
+            name={user.displayName}
+            size={84}
+            style={styles.avatarCircle}
+            backgroundColor={Colors.primary}
+            borderColor={Colors.primaryLight}
+            borderWidth={3}
+            textColor={Colors.black}
+            textStyle={{ fontSize: 34 }}
+          />
           <Text style={styles.displayName}>{user.displayName}</Text>
           <View
             style={[
@@ -262,7 +269,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 10,
   },
-  avatarText: { fontSize: 34, fontWeight: '800', color: Colors.black },
   displayName: { fontSize: 24, fontWeight: '800', color: Colors.text },
   statusBadge: {
     flexDirection: 'row',

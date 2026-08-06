@@ -26,8 +26,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.Calendar;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -51,26 +54,36 @@ public class UserService {
     @Transactional(readOnly = true)
     @Cacheable(value = "user:self" , key = "#userId")
     public UserSelfResponse getSelfUserResponseById(UUID userId) {
-        return toSelfResponse(findUserById(userId));
+        return toSelfResponse(findUserById(userId), findAvatarUrl(userId));
     }
 
     @Transactional(readOnly = true)
     @Cacheable(value = "user:public", key = "#userId")
     public UserPublicResponse getPublicUserResponseById(UUID userId) {
-        return toPublicResponse(findUserById(userId));
+        return toPublicResponse(findUserById(userId), findAvatarUrl(userId));
     }
 
 
     @Transactional(readOnly = true)
     public Slice<UserSelfResponse> findAllUsers(Pageable pageable) {
-        return userRepository.findAll(pageable).map(this::toSelfResponse);
+        return mapWithAvatars(userRepository.findAll(pageable));
     }
 
     @Transactional(readOnly = true)
     public Slice<UserSelfResponse> searchUsers(String query, Pageable pageable) {
-        return userRepository
-                .findByDisplayNameContainingIgnoreCaseOrEmailContainingIgnoreCase(query, query, pageable)
-                .map(this::toSelfResponse);
+        return mapWithAvatars(userRepository
+                .findByDisplayNameContainingIgnoreCaseOrEmailContainingIgnoreCase(query, query, pageable));
+    }
+
+    @Transactional(readOnly = true)
+    public List<UserPublicResponse> getPublicUsersByIds(List<UUID> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, String> avatarUrls = findAvatarUrls(userIds);
+        return userRepository.findAllById(userIds).stream()
+                .map(user -> toPublicResponse(user, avatarUrls.get(user.getId())))
+                .toList();
     }
 
 
@@ -89,10 +102,10 @@ public class UserService {
         ensureUniqueFields(request, user);
 
         if (!applyPatch(request, user)) {
-            return toSelfResponse(user);
+            return toSelfResponse(user, findAvatarUrl(userId));
         }
 
-        UserSelfResponse response = toSelfResponse(save(user));
+        UserSelfResponse response = toSelfResponse(save(user), findAvatarUrl(userId));
         eventPublisher.publishEvent(new UserUpdatedEvent(userId, Instant.now()));
         return response;
     }
@@ -111,12 +124,12 @@ public class UserService {
         User user = findUserById(userId);
 
         if (user.getStatus() == Status.SUSPENDED) {
-            return toSelfResponse(user);
+            return toSelfResponse(user, findAvatarUrl(userId));
         }
 
         user.setStatus(Status.SUSPENDED);
 
-        UserSelfResponse response = toSelfResponse(save(user));
+        UserSelfResponse response = toSelfResponse(save(user), findAvatarUrl(userId));
         eventPublisher.publishEvent(new UserSuspendedEvent(userId, Instant.now()));
         return response;
     }
@@ -129,12 +142,12 @@ public class UserService {
         User user = findUserById(userId);
 
         if (user.getStatus() == Status.ACTIVE) {
-            return toSelfResponse(user);
+            return toSelfResponse(user, findAvatarUrl(userId));
         }
 
         user.setStatus(Status.ACTIVE);
 
-        UserSelfResponse response = toSelfResponse(save(user));
+        UserSelfResponse response = toSelfResponse(save(user), findAvatarUrl(userId));
         eventPublisher.publishEvent(new UserUnsuspendedEvent(userId, Instant.now()));
         return response;
     }
@@ -314,7 +327,7 @@ public class UserService {
      * =========================
      */
 
-    private UserSelfResponse toSelfResponse(User user) {
+    private UserSelfResponse toSelfResponse(User user, String avatarUrl) {
 
         return new UserSelfResponse(
                 user.getId(),
@@ -328,18 +341,49 @@ public class UserService {
                 user.getCreatedAt(),
                 user.getUpdatedAt(),
                 user.getPhoneVerified(),
-                user.getEmailVerified()
+                user.getEmailVerified(),
+                avatarUrl
         );
     }
 
 
-    private UserPublicResponse toPublicResponse(User user) {
+    private UserPublicResponse toPublicResponse(User user, String avatarUrl) {
 
         return new UserPublicResponse(
+                user.getId(),
                 user.getDisplayName(),
                 user.getTrustScore(),
-                user.getRankScore()
+                user.getRankScore(),
+                avatarUrl
         );
+    }
+
+
+    /*
+     * =========================
+     * AVATAR LOOKUP HELPERS
+     * =========================
+     */
+
+    private String findAvatarUrl(UUID userId) {
+        return userProfileRepository.findAvatarUrlByUserId(userId).orElse(null);
+    }
+
+    private Map<UUID, String> findAvatarUrls(List<UUID> userIds) {
+        // Collectors.toMap rejects null values (Map.merge NPEs on them), and a user
+        // without an avatar has a null avatarUrl here - filter those out instead;
+        // callers already treat a missing map entry the same as a null avatar.
+        return userProfileRepository.findAvatarUrlsByUserIdIn(userIds).stream()
+                .filter(projection -> projection.getAvatarUrl() != null)
+                .collect(Collectors.toMap(
+                        UserProfileRepository.AvatarUrlProjection::getUserId,
+                        UserProfileRepository.AvatarUrlProjection::getAvatarUrl));
+    }
+
+    private Slice<UserSelfResponse> mapWithAvatars(Slice<User> slice) {
+        Map<UUID, String> avatarUrls = findAvatarUrls(
+                slice.getContent().stream().map(User::getId).toList());
+        return slice.map(user -> toSelfResponse(user, avatarUrls.get(user.getId())));
     }
 
 }
