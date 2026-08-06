@@ -58,7 +58,14 @@ jobs:
           REGION=eu-north-1
           GHCR_REGISTRY=ghcr.io/mehmettguzell
 
+          # Stage timing, logged to stdout so it shows up in the SSM output
+          # captured below — lets us see where a slow deploy actually spent
+          # its time without guessing.
+          ts() { echo "[timing] $(date +%s) $1"; }
+          ts "script_start"
+
           command -v jq >/dev/null 2>&1 || (apt-get update -y && apt-get install -y jq)
+          ts "jq_ready"
 
           get_secret() {
             aws secretsmanager get-secret-value --region "$REGION" --secret-id "$1" \
@@ -71,8 +78,10 @@ jobs:
           # necessary long-lived secret (GitHub has no IAM-style short-lived
           # pull token for private packages), so it's stored in Secrets
           # Manager like everything else, not embedded anywhere.
+          ts "secrets_start"
           GHCR_PAT=$(get_secret stop/prod/ghcr-pat | jq -r .token)
           echo "$GHCR_PAT" | docker login ghcr.io --username mehmettguzell --password-stdin
+          ts "ghcr_login_done"
 
           IDENTITY_DB_PASSWORD=$(get_secret stop/prod/identity-db | jq -r .password)
           MATCH_DB_PASSWORD=$(get_secret stop/prod/match-db | jq -r .password)
@@ -80,6 +89,7 @@ jobs:
           NOTIFICATION_DB_PASSWORD=$(get_secret stop/prod/notification-db | jq -r .password)
           JWT_PUBLIC_KEY=$(get_secret stop/prod/jwt-keys | jq -r .public)
           JWT_PRIVATE_KEY=$(get_secret stop/prod/jwt-keys | jq -r .private)
+          ts "secrets_done"
 
           cat > /opt/STOP/.env <<ENVEOF
           SPRING_PROFILES_ACTIVE=prod
@@ -134,6 +144,23 @@ jobs:
             docker tag "$GHCR_REGISTRY/stop/$svc:latest" "$GHCR_REGISTRY/stop/$svc:previous" 2>/dev/null || true
           done
 
+          # Free disk BEFORE pulling fresh layers, but only when actually
+          # needed — dangling images/build cache from prior deploys can fill
+          # the volume and fail the pull with "no space left on device", but
+          # `docker system prune` itself costs a few seconds even when
+          # there's nothing to reclaim, so skip it below the threshold
+          # instead of paying that cost on every single deploy. This only
+          # ever touches untagged/unused data: the `latest` and `previous`
+          # tags (and their layers) used for rollback are never removed.
+          DISK_USED_PCT=$(df --output=pcent / | tail -1 | tr -dc '0-9')
+          if [ "${DISK_USED_PCT:-0}" -ge 80 ]; then
+            ts "pre_pull_cleanup_start (disk ${DISK_USED_PCT}% used)"
+            docker system prune -f
+            ts "pre_pull_cleanup_done"
+          else
+            ts "pre_pull_cleanup_skipped (disk ${DISK_USED_PCT}% used)"
+          fi
+
           # `--wait --wait-timeout 300` makes Compose itself block until every
           # service (five of them, opened at once) reports healthy and exit
           # non-zero if the 300s budget runs out, instead of a hand-rolled
@@ -141,20 +168,27 @@ jobs:
           # start_period: 90s + interval: 30s x retries: 5 headroom for a
           # slow-starting service.
           echo "Deploying latest"
+          ts "pull_start"
           docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml pull
+          ts "pull_done"
 
+          ts "up_start"
           if docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml \
                up -d --remove-orphans --wait --wait-timeout 300; then
+            ts "up_done"
             echo "Deploy succeeded."
           else
+            ts "up_failed"
             echo "Healthcheck failed — rolling back to previous (already local, no pull needed)"
             IMAGE_TAG=previous docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml \
               up -d --remove-orphans --wait --wait-timeout 300 \
               || echo "WARNING: rollback healthcheck also failed, manual intervention required"
+            ts "rollback_done"
             exit 1
           fi
 
-          docker image prune -f
+          docker system prune -f
+          ts "script_done"
           SCRIPT_EOF
           )
 
