@@ -12,7 +12,6 @@ identity:
 app:
   avatar-storage:
     directory: ${AVATAR_STORAGE_DIR:/data/avatars}
-    public-base-url: ${PUBLIC_BASE_URL:http://localhost:8080/api/v1}
 
 logging:
   level:
