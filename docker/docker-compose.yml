@@ -242,8 +242,6 @@ services:
       JWT_PRIVATE_KEY: ${JWT_PRIVATE_KEY}
 
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN}
-
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080/api/v1}
     volumes:
       - identity_avatars:/data/avatars
     depends_on:

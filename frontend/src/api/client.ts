@@ -21,7 +21,7 @@ export const setCachedToken = (token: string | null) => {
 
 const debuggerHost = Constants.expoConfig?.hostUri;
 // let host = "13.50.15.181";
-let host = "192.168.1.128";
+let host = "192.168.1.19";
 
 // if (debuggerHost) {
 //   host = debuggerHost.split(':')[0];
@@ -32,6 +32,39 @@ let host = "192.168.1.128";
 // }
 
 export const BASE_URL = `http://${host}:8080/api/v1`;
+const API_ORIGIN = `http://${host}:8080`;
+
+// The backend returns avatarUrl as a client-relative path (e.g.
+// "/api/v1/users/profile/avatar/x.jpg") so it never bakes in a host that can
+// go stale (LAN IP changes, server IP changes...). Older records may still
+// hold a full absolute URL from before this change - strip any scheme+host
+// prefix so both shapes resolve against whatever host we're using right now.
+export const resolveAvatarUrl = (
+  value: string | null | undefined,
+): string | null => {
+  if (!value) return null;
+  const path = value.startsWith("http")
+    ? value.replace(/^https?:\/\/[^/]+/, "")
+    : value;
+  return `${API_ORIGIN}${path}`;
+};
+
+const rewriteAvatarUrls = (data: unknown): unknown => {
+  if (Array.isArray(data)) {
+    data.forEach(rewriteAvatarUrls);
+    return data;
+  }
+  if (data && typeof data === "object") {
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      if (key === "avatarUrl" && typeof value === "string") {
+        (data as Record<string, unknown>)[key] = resolveAvatarUrl(value);
+      } else {
+        rewriteAvatarUrls(value);
+      }
+    }
+  }
+  return data;
+};
 
 export const STORAGE_KEYS = {
   ACCESS_TOKEN: "@stop/access_token",
@@ -78,7 +111,10 @@ const processQueue = (error: unknown, token: string | null) => {
 };
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    rewriteAvatarUrls(response.data);
+    return response;
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & {
       _retry?: boolean;

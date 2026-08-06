@@ -30,9 +30,7 @@ class AvatarStorageServiceTest {
 
     @BeforeEach
     void setUp() {
-        AvatarStorageProperties properties = new AvatarStorageProperties(
-                tempDir.toString(), "http://localhost:8080/api/v1"
-        );
+        AvatarStorageProperties properties = new AvatarStorageProperties(tempDir.toString());
         service = new AvatarStorageService(properties);
     }
 
@@ -47,7 +45,7 @@ class AvatarStorageServiceTest {
     void uploadAvatar_validImage_savesFileAndReturnsUrl() throws IOException {
         String url = service.uploadAvatar(pngBytes(200, 100));
 
-        assertTrue(url.startsWith("http://localhost:8080/api/v1/users/profile/avatar/"));
+        assertTrue(url.startsWith("/api/v1/users/profile/avatar/"));
         assertTrue(url.endsWith(".jpg"));
 
         String filename = url.substring(url.lastIndexOf('/') + 1);

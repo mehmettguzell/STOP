@@ -65,7 +65,10 @@ public class AvatarStorageService {
         }
 
         log.info("Avatar saved file={}", filename);
-        return properties.publicBaseUrl() + "/users/profile/avatar/" + filename;
+        // Client-relative path, not an absolute URL - the host clients reach this through
+        // (LAN IP, prod IP/domain, tunnel...) can change without redeploying; the frontend
+        // resolves this against whatever base URL it's currently using.
+        return "/api/v1/users/profile/avatar/" + filename;
     }
 
     /** Deletes the file referenced by a previously-returned avatar URL. Propagates IO failures - callers decide whether that should block their operation. */
