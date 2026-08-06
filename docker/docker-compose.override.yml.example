@@ -1,0 +1,187 @@
+# docker-compose.override.yml — SADECE lokal gelistirme icin.
+# `docker compose up` bu dosyayi otomatik okuyup docker-compose.yml'in ustune
+# bindirir; EC2'ye yalnizca docker-compose.yml gonderildigi icin buradaki hicbir
+# ayar production'a sizmaz.
+#
+# Bu dosya .gitignore'da (gercek override.yml her gelistiricinin kendi
+# makinesinde). Yeni bir ortam kurarken bu dosyayi
+# `docker-compose.override.yml` olarak kopyala.
+#
+# ---------------------------------------------------------------------------
+# Asagidaki bes Java servisinin hepsinde gecerli olan ortak kararlar
+# (tekrar etmemek icin `x-dev-java-service` anchor'inda toplandi):
+#
+# 1) AYRI IMAJ ISMI + `pull_policy: build`
+#    Base'de `image: ghcr.io/.../<svc>:latest` yaziyor. Compose bir imaji
+#    yalnizca LOKALDE YOKSA build eder; GHCR'dan cekilmis prod imaji durdugu
+#    surece Dockerfile_dev hic calismiyor, konteyner prod entrypoint'i olan
+#    `java -jar app.jar` ile aciliyor ve bind mount /app'in ustunu orttugu icin
+#    jar kayboluyordu -> "Unable to access jarfile app.jar".
+#    Ayri tag ayni zamanda dev build'inin prod `:latest` etiketini lokalde
+#    sessizce ezmesini de engelliyor.
+#
+# 2) HEALTHCHECK: sadece ZAMANLAMA eziliyor; base'deki actuator testi (wget ile)
+#    oldugu gibi kaliyor - maven:3.9.16-eclipse-temurin-21-noble imajinda wget
+#    kurulu, actuator health de dev'de expose ediliyor.
+#    Sorun testin kendisi degil, base'deki `start_period: 90s`: o deger hazir
+#    jar'i calistiran prod imajina gore ayarli. Dev'de `mvn spring-boot:run`
+#    once tum projeyi derliyor ve ilk kalkis (ozellikle Windows bind mount
+#    uzerinden) rahatlikla birkac dakika suruyor; 90sn dolunca healthcheck
+#    "unhealthy" damgasini vuruyordu.
+#
+# 3) BELLEK: base'deki `limits.memory: 512m` hazir jar'i calistiran prod
+#    konteynerine gore olculmus. Dev konteyneri ayni anda Maven + javac +
+#    forked Spring Boot JVM tasiyor; 512m'de derlemenin ortasinda OOMKill
+#    (exit 137) yiyor. Dev'de limit 2g'ye cikariliyor.
+#
+# 4) PROFIL: base `${SPRING_PROFILES_ACTIVE:-prod}` okuyor, yani dogru profil
+#    .env'de ne yazdigina bagli kaliyordu. Override dosyasi tanimi geregi
+#    dev'e ozel oldugu icin profil burada sabitlendi.
+#
+# 5) PAYLASILAN maven_cache: bes servis ayni named volume'a ayni anda yaziyor.
+#    Maven'in varsayilan kilit stratejisi yalnizca kendi JVM'ini korur,
+#    konteynerler arasini degil; ilk `up`ta yarim inmis artifact ve
+#    `.lastUpdated` copleri olusabiliyor. `file-lock` stratejisi volume
+#    uzerinden gercek dosya kilidi kullandigi icin bunu engelliyor.
+#
+# 6) SPRING_MAIN_LAZY_INITIALIZATION: "false" (dev acilisini hizlandirmak
+#    icin once "true" denenmisti). Lazy-init acikken @KafkaListener'lar hic
+#    calismiyor: dinleyici container'lari SmartLifecycle uzerinden context
+#    refresh'te otomatik baslar, bu da ilgili bean'lerin eager (lazy olmayan)
+#    olusturulmasini gerektirir. Sonuc: hicbir servis Kafka consumer group'a
+#    hic katilmiyordu (notification-service'te tek bir bildirim bile hic
+#    olusmuyordu - broker'da consumer group listesi tamamen bostu), ama
+#    hicbir yerde hata da loglanmiyordu. Bu bir kerede tum
+#    match.*/identity.* event tuketimini sessizce kirdigi icin "false"
+#    sabitlendi.
+# ---------------------------------------------------------------------------
+
+x-dev-java-service: &dev-java-service
+  pull_policy: build
+  restart: "no"
+  environment:
+    SPRING_PROFILES_ACTIVE: dev
+    SPRING_MAIN_LAZY_INITIALIZATION: "false"
+    SPRING_DEVTOOLS_RESTART_ENABLED: "true" # hot-reload
+    JAVA_TOOL_OPTIONS: -XX:TieredStopAtLevel=1
+    MAVEN_ARGS: -Daether.syncContext.named.factory=file-lock -Daether.syncContext.named.nameMapper=file-gav
+  deploy:
+    resources:
+      limits:
+        memory: 2g
+      reservations:
+        memory: 512m
+  healthcheck:
+    interval: 10s
+    timeout: 5s
+    retries: 10
+    start_period: 300s
+
+services:
+  # ------ INFRASTRUCTURE (sadece portlar disari aciliyor) ------
+
+  identity-db:
+    ports:
+      - "5432:5432"
+    restart: "no"
+
+  match-db:
+    ports:
+      - "5433:5432"
+    restart: "no"
+
+  communication-db:
+    ports:
+      - "5434:5432"
+    restart: "no"
+
+  notification-db:
+    ports:
+      - "5435:5432"
+    restart: "no"
+
+  broker:
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    restart: "no"
+
+  redis:
+    ports:
+      - "6379:6379"
+    restart: "no"
+
+  # ------ SERVICES ------
+
+  identity-service:
+    <<: *dev-java-service
+    image: stop-dev/identity-service:dev
+    build:
+      context: ../identity-service
+      dockerfile: Dockerfile_dev
+    ports:
+      - "8081:8081"
+    volumes:
+      - ../identity-service:/app # BIND MOUNT: kodun aninda iceri girsin
+      - maven_cache:/root/.m2 # Maven kutuphaneleri tum servislerde ortak
+
+  match-service:
+    <<: *dev-java-service
+    image: stop-dev/match-service:dev
+    build:
+      context: ../match-service
+      dockerfile: Dockerfile_dev
+    ports:
+      - "8082:8082"
+    volumes:
+      - ../match-service:/app
+      - maven_cache:/root/.m2
+
+  notification-service:
+    <<: *dev-java-service
+    image: stop-dev/notification-service:dev
+    build:
+      context: ../notification-service
+      dockerfile: Dockerfile_dev
+    ports:
+      - "8083:8083"
+    volumes:
+      - ../notification-service:/app
+      - maven_cache:/root/.m2
+
+  communication-service:
+    <<: *dev-java-service
+    image: stop-dev/communication-service:dev
+    build:
+      context: ../communication-service
+      dockerfile: Dockerfile_dev
+    ports:
+      - "8084:8084"
+    volumes:
+      - ../communication-service:/app
+      - maven_cache:/root/.m2
+
+  # ------ GATEWAY ------
+
+  api-gateway:
+    <<: *dev-java-service
+    image: stop-dev/api-gateway:dev
+    build:
+      context: ../api-gateway
+      dockerfile: Dockerfile_dev
+    volumes:
+      - ../api-gateway:/app
+      - maven_cache:/root/.m2
+
+    depends_on:
+      identity-service:
+        condition: service_started
+      match-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      communication-service:
+        condition: service_started
+
+volumes:
+  maven_cache:
