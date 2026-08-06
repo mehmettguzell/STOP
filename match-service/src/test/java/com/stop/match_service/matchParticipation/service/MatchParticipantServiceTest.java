@@ -4,10 +4,14 @@ import com.stop.match_service.match.entity.Match;
 import com.stop.match_service.match.entity.Status;
 import com.stop.match_service.match.kafka.event.JerseyColorDecidedEvent;
 import com.stop.match_service.match.repository.MatchRepository;
+import com.stop.match_service.matchParticipation.dto.request.ParticipantRequestReq;
+import com.stop.match_service.matchParticipation.dto.request.RemoveParticipationReq;
 import com.stop.match_service.matchParticipation.dto.request.TeamAssignmentReq;
 import com.stop.match_service.matchParticipation.entity.MatchParticipant;
 import com.stop.match_service.matchParticipation.entity.ParticipantStatus;
 import com.stop.match_service.matchParticipation.entity.TeamType;
+import com.stop.match_service.matchParticipation.kafka.event.ParticipantJoinedEvent;
+import com.stop.match_service.matchParticipation.kafka.event.WaitlistPromotedEvent;
 import com.stop.match_service.matchParticipation.repository.MatchParticipantRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +45,9 @@ class MatchParticipantServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private WaitlistService waitlistService;
 
     @InjectMocks
     private MatchParticipantService service;
@@ -127,5 +134,110 @@ class MatchParticipantServiceTest {
 
         assertThat(match.getWhiteTeam()).isEqualTo(TeamType.HOME);
         verify(eventPublisher, never()).publishEvent(any(JerseyColorDecidedEvent.class));
+    }
+
+    private Match fullMatch(UUID matchId, UUID organizerId, LocalDateTime startTime) {
+        return Match.builder()
+                .id(matchId)
+                .organizerId(organizerId)
+                .status(Status.FULL)
+                .capacity(2)
+                .participantCount(2)
+                .startTime(startTime)
+                .build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> List<T> publishedEventsOfType(Class<T> type) {
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(eventPublisher, org.mockito.Mockito.atLeastOnce()).publishEvent(captor.capture());
+        return captor.getAllValues().stream()
+                .filter(type::isInstance)
+                .map(e -> (T) e)
+                .toList();
+    }
+
+    @Test
+    void leaveMatch_matchWasFull_andWaitlistHasEntry_promotesUserAndPublishesEvents() {
+        UUID matchId = UUID.randomUUID();
+        UUID organizerId = UUID.randomUUID();
+        UUID leavingUserId = UUID.randomUUID();
+        UUID promotedUserId = UUID.randomUUID();
+        Match match = fullMatch(matchId, organizerId, LocalDateTime.now().plusDays(1));
+        MatchParticipant leaving = participant(match, leavingUserId, null);
+
+        when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
+        when(repository.findByMatchIdAndUserId(matchId, leavingUserId)).thenReturn(Optional.of(leaving));
+        when(waitlistService.popNextWaiting(matchId)).thenReturn(Optional.of(promotedUserId));
+        when(repository.findByMatchIdAndUserId(matchId, promotedUserId)).thenReturn(Optional.empty());
+
+        service.leaveMatch(new ParticipantRequestReq(matchId), leavingUserId);
+
+        assertThat(match.getParticipantCount()).isEqualTo(2); // decremented then re-incremented by promotion
+        assertThat(match.getStatus()).isEqualTo(Status.FULL); // re-filled by the promoted user
+
+        assertThat(publishedEventsOfType(ParticipantJoinedEvent.class))
+                .anyMatch(e -> e.userId().equals(promotedUserId));
+        assertThat(publishedEventsOfType(WaitlistPromotedEvent.class))
+                .anyMatch(e -> e.matchId().equals(matchId) && e.userId().equals(promotedUserId));
+    }
+
+    @Test
+    void leaveMatch_matchWasFull_noWaitlistEntries_staysOpenNoPromotionEvent() {
+        UUID matchId = UUID.randomUUID();
+        UUID organizerId = UUID.randomUUID();
+        UUID leavingUserId = UUID.randomUUID();
+        Match match = fullMatch(matchId, organizerId, LocalDateTime.now().plusDays(1));
+        MatchParticipant leaving = participant(match, leavingUserId, null);
+
+        when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
+        when(repository.findByMatchIdAndUserId(matchId, leavingUserId)).thenReturn(Optional.of(leaving));
+        when(waitlistService.popNextWaiting(matchId)).thenReturn(Optional.empty());
+
+        service.leaveMatch(new ParticipantRequestReq(matchId), leavingUserId);
+
+        assertThat(match.getStatus()).isEqualTo(Status.OPEN);
+        assertThat(publishedEventsOfType(WaitlistPromotedEvent.class)).isEmpty();
+        assertThat(publishedEventsOfType(ParticipantJoinedEvent.class)).isEmpty();
+    }
+
+    @Test
+    void leaveMatch_matchWasNotFull_waitlistNeverConsulted() {
+        UUID matchId = UUID.randomUUID();
+        UUID organizerId = UUID.randomUUID();
+        UUID leavingUserId = UUID.randomUUID();
+        Match match = openMatch(matchId, organizerId);
+        match.setCapacity(5);
+        match.setParticipantCount(2);
+        MatchParticipant leaving = participant(match, leavingUserId, null);
+
+        when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
+        when(repository.findByMatchIdAndUserId(matchId, leavingUserId)).thenReturn(Optional.of(leaving));
+
+        service.leaveMatch(new ParticipantRequestReq(matchId), leavingUserId);
+
+        verify(waitlistService, never()).popNextWaiting(any());
+    }
+
+    @Test
+    void removePlayer_matchWasFull_promotesWaitlistEntry_evenOnMatchDay() {
+        UUID matchId = UUID.randomUUID();
+        UUID organizerId = UUID.randomUUID();
+        UUID removedUserId = UUID.randomUUID();
+        UUID promotedUserId = UUID.randomUUID();
+        // Within the 2h self-leave cutoff - removePlayer must still work, unlike leaveMatch.
+        Match match = fullMatch(matchId, organizerId, LocalDateTime.now().plusMinutes(30));
+        MatchParticipant removed = participant(match, removedUserId, null);
+
+        when(matchRepository.findById(matchId)).thenReturn(Optional.of(match));
+        when(repository.findByMatchIdAndUserId(matchId, removedUserId)).thenReturn(Optional.of(removed));
+        when(waitlistService.popNextWaiting(matchId)).thenReturn(Optional.of(promotedUserId));
+        when(repository.findByMatchIdAndUserId(matchId, promotedUserId)).thenReturn(Optional.empty());
+
+        service.removePlayer(new RemoveParticipationReq(matchId, removedUserId), organizerId);
+
+        assertThat(match.getStatus()).isEqualTo(Status.FULL);
+        assertThat(publishedEventsOfType(WaitlistPromotedEvent.class))
+                .anyMatch(e -> e.userId().equals(promotedUserId));
     }
 }

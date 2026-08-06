@@ -19,7 +19,12 @@ public enum ParticipationErrorCode implements ErrorCode {
     INVALID_MATCH_STATUS_FOR_LEAVING("INVALID_MATCH_STATUS_FOR_LEAVING", "Baslamis, tamamlanmis veya iptal edilmis bir mactan ayrilamazsiniz.", HttpStatus.BAD_REQUEST),
     MAX_REJECTIONS_REACHED("MAX_REJECTIONS_REACHED", "Bu mac icin maksimum red sayisina ulasiniz. Tekrar istek gonderemezsiniz.", HttpStatus.BAD_REQUEST),
     INVALID_TEAM_ASSIGNMENT("INVALID_TEAM_ASSIGNMENT", "Takim atamasi gecersiz. Tum katilimcilar tam olarak bir kez atanmalidir.", HttpStatus.BAD_REQUEST),
-    TEAM_ASSIGNMENT_NOT_ALLOWED("TEAM_ASSIGNMENT_NOT_ALLOWED", "Bu mac durumunda takim atamasi yapilamaz.", HttpStatus.BAD_REQUEST);
+    TEAM_ASSIGNMENT_NOT_ALLOWED("TEAM_ASSIGNMENT_NOT_ALLOWED", "Bu mac durumunda takim atamasi yapilamaz.", HttpStatus.BAD_REQUEST),
+    WAITLIST_FULL("WAITLIST_FULL", "Bekleme listesi doludur (maksimum 10 kisi).", HttpStatus.BAD_REQUEST),
+    ALREADY_WAITLISTED("ALREADY_WAITLISTED", "Bu mac icin zaten bekleme listesindesiniz.", HttpStatus.BAD_REQUEST),
+    MATCH_NOT_FULL("MATCH_NOT_FULL", "Mac henuz dolu degil. Bekleme listesi yerine normal katilim istegini kullanin.", HttpStatus.BAD_REQUEST),
+    NOT_WAITLISTED("NOT_WAITLISTED", "Bekleme listesinde aktif bir kaydiniz bulunamadi.", HttpStatus.BAD_REQUEST),
+    INVALID_WAITLIST_REORDER("INVALID_WAITLIST_REORDER", "Siralama listesi mevcut bekleme listesiyle eslesmiyor.", HttpStatus.BAD_REQUEST);
 
     private final String code;
     private final String message;

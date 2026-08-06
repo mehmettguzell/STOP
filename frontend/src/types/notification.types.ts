@@ -7,7 +7,8 @@ export type NotificationType =
   | 'PARTICIPANT_JOINED'
   | 'PARTICIPANT_LEFT'
   | 'FRIEND_REQUEST_RECEIVED'
-  | 'FRIEND_REQUEST_ACCEPTED';
+  | 'FRIEND_REQUEST_ACCEPTED'
+  | 'WAITLIST_PROMOTED';
 
 export interface NotificationResponse {
   id: string;

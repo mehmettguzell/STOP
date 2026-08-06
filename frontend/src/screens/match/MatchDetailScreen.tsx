@@ -27,6 +27,7 @@ import {
   MatchParticipantResponse,
   ParticipationRequestResponse,
   MatchStatus,
+  WaitlistEntryResponse,
 } from "../../types/match.types";
 import { UserSelfResponse } from "../../types/user.types";
 import { MatchDetailScreenProps } from "../../navigation/types";
@@ -76,6 +77,9 @@ export default function MatchDetailScreen({
   >([]);
   const [myRequest, setMyRequest] =
     useState<ParticipationRequestResponse | null>(null);
+  const [myWaitlistEntry, setMyWaitlistEntry] =
+    useState<WaitlistEntryResponse | null>(null);
+  const [waitlist, setWaitlist] = useState<WaitlistEntryResponse[]>([]);
   const [displayNames, setDisplayNames] = useState<Record<string, string>>({});
   const [avatarUrls, setAvatarUrls] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
@@ -139,6 +143,16 @@ export default function MatchDetailScreen({
       match.status === "OPEN" ||
       match.status === "FULL");
 
+  // 6. Bekleme Listesi Mantığı — maç doluyken (canJoin zaten OPEN/CREATED
+  // gerektirdiği için bu ikisi doğal olarak birbirini dışlar).
+  const isWaitlisted = myWaitlistEntry?.status === "WAITING";
+  const canJoinWaitlist =
+    !!match &&
+    !isParticipant &&
+    !isOrganizer &&
+    !isWaitlisted &&
+    match.status === "FULL";
+
   const fetchDisplayNames = useCallback(async (userIds: string[]) => {
     const uniqueIds = Array.from(new Set(userIds));
     const names: Record<string, string> = {};
@@ -171,6 +185,9 @@ export default function MatchDetailScreen({
       setParticipants(participantData);
 
       const userIds = participantData.map((p) => p.userId);
+      const amIParticipant = participantData.some(
+        (p) => p.userId === currentUserId,
+      );
 
       if (matchData.organizerId === currentUserId) {
         // Organizer: fetch pending requests for private matches
@@ -192,6 +209,22 @@ export default function MatchDetailScreen({
         } else {
           setPendingRequests([]);
         }
+
+        // Organizer: fetch the waitlist while the match is full
+        if (matchData.status === "FULL") {
+          try {
+            const entries = await participationApi.getWaitlist(matchId);
+            setWaitlist(entries);
+            const waitlistUserIds = entries
+              .map((e) => e.userId)
+              .filter((id) => !userIds.includes(id));
+            if (waitlistUserIds.length > 0) userIds.push(...waitlistUserIds);
+          } catch {
+            setWaitlist([]);
+          }
+        } else {
+          setWaitlist([]);
+        }
       } else {
         // Non-organizer: check own request status
         setPendingRequests([]);
@@ -200,6 +233,18 @@ export default function MatchDetailScreen({
           setMyRequest(req || null);
         } catch {
           setMyRequest(null);
+        }
+
+        // Non-organizer, non-participant: check own waitlist status while full
+        if (!amIParticipant && matchData.status === "FULL") {
+          try {
+            const entry = await participationApi.getMyWaitlistEntry(matchId);
+            setMyWaitlistEntry(entry || null);
+          } catch {
+            setMyWaitlistEntry(null);
+          }
+        } else {
+          setMyWaitlistEntry(null);
         }
       }
 
@@ -352,6 +397,97 @@ export default function MatchDetailScreen({
         },
       },
     ]);
+  };
+
+  const handleJoinWaitlist = async () => {
+    if (!match) return;
+    setActionLoading(true);
+    try {
+      const entry = await participationApi.joinWaitlist(match.id);
+      setMyWaitlistEntry(entry);
+      Alert.alert(
+        "Bekleme Listesine Katıldın",
+        `Sıradaki pozisyonun: ${entry.position ?? "-"}. Yer açılınca otomatik katılacaksın.`,
+      );
+    } catch (err) {
+      Alert.alert("Hata", getErrorMessage(err));
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleLeaveWaitlist = async () => {
+    if (!match) return;
+    Alert.alert(
+      "Bekleme Listesinden Çık",
+      "Bekleme listesinden çıkmak istediğine emin misin?",
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Çık",
+          style: "destructive",
+          onPress: async () => {
+            setActionLoading(true);
+            try {
+              await participationApi.leaveWaitlist(match.id);
+              setMyWaitlistEntry(null);
+              await fetchData();
+            } catch (err) {
+              Alert.alert("Hata", getErrorMessage(err));
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleRemoveFromWaitlist = (userId: string) => {
+    if (!match) return;
+    const name = displayNames[userId] || "Bu kişi";
+    Alert.alert(
+      "Bekleme Listesinden Çıkar",
+      `${name} adlı kişiyi bekleme listesinden çıkarmak istiyor musun?`,
+      [
+        { text: "Vazgeç", style: "cancel" },
+        {
+          text: "Çıkar",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await participationApi.removeFromWaitlist(match.id, userId);
+              await fetchData();
+            } catch (err) {
+              Alert.alert("Hata", getErrorMessage(err));
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleMoveWaitlistEntry = async (index: number, direction: -1 | 1) => {
+    if (!match) return;
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= waitlist.length) return;
+
+    const reordered = [...waitlist];
+    [reordered[index], reordered[targetIndex]] = [
+      reordered[targetIndex],
+      reordered[index],
+    ];
+    setWaitlist(reordered); // optimistic
+    try {
+      const updated = await participationApi.reorderWaitlist(
+        match.id,
+        reordered.map((e) => e.id),
+      );
+      setWaitlist(updated);
+    } catch (err) {
+      Alert.alert("Hata", getErrorMessage(err));
+      await fetchData();
+    }
   };
 
   const handleCancel = () => {
@@ -840,6 +976,90 @@ export default function MatchDetailScreen({
             </View>
           )}
 
+        {/* Waitlist Section (organizer only, match full) */}
+        {isOrganizer && match.status === "FULL" && waitlist.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>
+              Bekleme Listesi ({waitlist.length}/10)
+            </Text>
+            <Card>
+              {waitlist.map((entry, i) => {
+                const name =
+                  displayNames[entry.userId] ||
+                  entry.userId.substring(0, 8) + "...";
+                return (
+                  <View
+                    key={entry.id}
+                    style={[
+                      styles.requestRow,
+                      i < waitlist.length - 1 && styles.participantBorder,
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={styles.requestUser}
+                      onPress={() => navigateToProfile(entry.userId)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.waitlistPositionBadge}>
+                        <Text style={styles.waitlistPositionText}>
+                          {entry.position}
+                        </Text>
+                      </View>
+                      <Avatar
+                        uri={avatarUrls[entry.userId]}
+                        name={name}
+                        size={42}
+                        style={styles.participantAvatar}
+                        backgroundColor={Colors.surfaceElevated}
+                        borderWidth={0}
+                        textColor={Colors.text}
+                      />
+                      <Text style={styles.participantName}>{name}</Text>
+                    </TouchableOpacity>
+                    <View style={styles.requestActions}>
+                      <TouchableOpacity
+                        onPress={() => handleMoveWaitlistEntry(i, -1)}
+                        disabled={i === 0}
+                        style={styles.waitlistMoveBtn}
+                      >
+                        <Text
+                          style={[
+                            styles.waitlistMoveText,
+                            i === 0 && styles.waitlistMoveDisabled,
+                          ]}
+                        >
+                          ▲
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleMoveWaitlistEntry(i, 1)}
+                        disabled={i === waitlist.length - 1}
+                        style={styles.waitlistMoveBtn}
+                      >
+                        <Text
+                          style={[
+                            styles.waitlistMoveText,
+                            i === waitlist.length - 1 &&
+                              styles.waitlistMoveDisabled,
+                          ]}
+                        >
+                          ▼
+                        </Text>
+                      </TouchableOpacity>
+                      <Button
+                        title="Çıkar"
+                        onPress={() => handleRemoveFromWaitlist(entry.userId)}
+                        variant="danger"
+                        size="small"
+                      />
+                    </View>
+                  </View>
+                );
+              })}
+            </Card>
+          </>
+        )}
+
         {/* Field Visualization */}
         {participants.length > 0 && (
           <FieldVisualization
@@ -992,6 +1212,31 @@ export default function MatchDetailScreen({
               variant="outline"
               icon="↩️"
             />
+          )}
+
+          {canJoinWaitlist && (
+            <Button
+              title="Bekleme Listesine Katıl"
+              onPress={handleJoinWaitlist}
+              loading={actionLoading}
+              variant="outline"
+              icon="⏳"
+            />
+          )}
+
+          {isWaitlisted && (
+            <>
+              <Text style={styles.waitlistStatusText}>
+                Bekleme listesinde {myWaitlistEntry?.position ?? "-"}.
+                sıradasın
+              </Text>
+              <Button
+                title="Bekleme Listesinden Çık"
+                onPress={handleLeaveWaitlist}
+                loading={actionLoading}
+                variant="outline"
+              />
+            </>
           )}
 
           {canLeave && (
@@ -1656,6 +1901,40 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: 24,
     gap: 12,
+  },
+
+  waitlistPositionBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.warning + "25",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+  waitlistPositionText: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Colors.warning,
+  },
+  waitlistMoveBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  waitlistMoveText: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    fontWeight: "700",
+  },
+  waitlistMoveDisabled: {
+    color: Colors.textDim,
+    opacity: 0.4,
+  },
+  waitlistStatusText: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    textAlign: "center",
+    fontWeight: "600",
   },
 
   // Modal styles

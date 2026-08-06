@@ -20,12 +20,14 @@ import com.stop.match_service.matchParticipation.kafka.event.ParticipantRemovedE
 import com.stop.match_service.matchParticipation.kafka.event.ParticipationRequestApprovedEvent;
 import com.stop.match_service.matchParticipation.kafka.event.ParticipationRequestRejectedEvent;
 import com.stop.match_service.matchParticipation.kafka.event.ParticipationRequestSentEvent;
+import com.stop.match_service.matchParticipation.kafka.event.WaitlistPromotedEvent;
 import com.stop.match_service.matchParticipation.kafka.producer.ParticipantJoinedProducer;
 import com.stop.match_service.matchParticipation.kafka.producer.ParticipantLeftProducer;
 import com.stop.match_service.matchParticipation.kafka.producer.ParticipantRemovedProducer;
 import com.stop.match_service.matchParticipation.kafka.producer.ParticipationRequestApprovedProducer;
 import com.stop.match_service.matchParticipation.kafka.producer.ParticipationRequestRejectedProducer;
 import com.stop.match_service.matchParticipation.kafka.producer.ParticipationRequestSentProducer;
+import com.stop.match_service.matchParticipation.kafka.producer.WaitlistPromotedProducer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
@@ -49,6 +51,7 @@ public class MatchKafkaListener {
     private final ParticipationRequestSentProducer participationRequestSentProducer;
     private final ParticipationRequestApprovedProducer participationRequestApprovedProducer;
     private final ParticipationRequestRejectedProducer participationRequestRejectedProducer;
+    private final WaitlistPromotedProducer waitlistPromotedProducer;
 
     @Async("kafkaEventExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -101,4 +104,8 @@ public class MatchKafkaListener {
     @Async("kafkaEventExecutor")
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onParticipationRequestRejected(ParticipationRequestRejectedEvent event) { participationRequestRejectedProducer.publish(event); }
+
+    @Async("kafkaEventExecutor")
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onWaitlistPromoted(WaitlistPromotedEvent event) { waitlistPromotedProducer.publish(event); }
 }
