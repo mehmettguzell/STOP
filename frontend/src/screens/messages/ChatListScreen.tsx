@@ -21,6 +21,7 @@ import { ChatMessageResponse, ConversationSummary } from '../../types/chat.types
 import { MessagesStackParamList } from '../../navigation/types';
 import { BASE_URL, STORAGE_KEYS } from '../../api/client';
 import { Colors } from '../../theme/colors';
+import Avatar from '../../components/ui/Avatar';
 
 const WS_BASE = BASE_URL.replace("https://", "wss://").replace("http://", "ws://").replace(":8080/api/v1", ":8084/ws").replace("/api/v1", "/ws");
 
@@ -40,6 +41,7 @@ function timeAgo(iso: string | null): string {
 export default function ChatListScreen({ navigation }: Props) {
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [titles, setTitles] = useState<Record<string, string>>({});
+  const [avatars, setAvatars] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
@@ -62,15 +64,22 @@ export default function ChatListScreen({ navigation }: Props) {
 
   const resolveAllTitles = async (convs: ConversationSummary[]) => {
     const resolved: Record<string, string> = {};
+    const resolvedAvatars: Record<string, string | null> = {};
+
+    const directIds = Array.from(
+      new Set(convs.filter((c) => c.type === 'DIRECT').map((c) => c.referenceId)),
+    );
+    const users = directIds.length
+      ? await userApi.getUsersByIds(directIds).catch(() => [])
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
     await Promise.allSettled(
       convs.map(async (c) => {
         if (c.type === 'DIRECT') {
-          try {
-            const user = await userApi.getUser(c.referenceId);
-            resolved[c.chatId] = user.displayName;
-          } catch {
-            resolved[c.chatId] = `Kullanıcı ${c.referenceId.slice(0, 6)}`;
-          }
+          const user = userMap.get(c.referenceId);
+          resolved[c.chatId] = user?.displayName ?? `Kullanıcı ${c.referenceId.slice(0, 6)}`;
+          resolvedAvatars[c.chatId] = user?.avatarUrl ?? null;
         } else {
           try {
             const match = await matchApi.getById(c.referenceId);
@@ -82,6 +91,7 @@ export default function ChatListScreen({ navigation }: Props) {
       })
     );
     setTitles((prev) => ({ ...prev, ...resolved }));
+    setAvatars((prev) => ({ ...prev, ...resolvedAvatars }));
   };
 
   // WebSocket bağlantısı — component mount/unmount
@@ -274,11 +284,15 @@ export default function ChatListScreen({ navigation }: Props) {
         )}
 
         {/* Avatar */}
-        <View style={[styles.avatar, isMatch && styles.avatarMatch]}>
-          <Text style={[styles.avatarText, isMatch && styles.avatarTextMatch]}>
-            {getInitial(item)}
-          </Text>
-        </View>
+        {isMatch ? (
+          <View style={[styles.avatar, styles.avatarMatch]}>
+            <Text style={[styles.avatarText, styles.avatarTextMatch]}>
+              {getInitial(item)}
+            </Text>
+          </View>
+        ) : (
+          <Avatar uri={avatars[item.chatId]} name={title} size={50} style={styles.avatar} />
+        )}
 
         {/* Body */}
         <View style={styles.body}>

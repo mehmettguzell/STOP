@@ -15,12 +15,15 @@ export interface UserSelfResponse {
   updatedAt: string;
   phoneVerified: boolean;
   emailVerified: boolean;
+  avatarUrl: string | null;
 }
 
 export interface UserPublicResponse {
+  id: string;
   displayName: string;
   trustScore: number;
   rankScore: number;
+  avatarUrl: string | null;
 }
 
 export interface UpdateUserRequest {

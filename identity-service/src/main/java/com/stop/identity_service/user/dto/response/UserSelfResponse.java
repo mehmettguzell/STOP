@@ -20,7 +20,8 @@ public record UserSelfResponse(
         Instant createdAt,
         Instant updatedAt,
         Boolean phoneVerified,
-        Boolean emailVerified
+        Boolean emailVerified,
+        String avatarUrl
 
 ) {
 }

@@ -15,6 +15,7 @@ import { UserSelfResponse } from "../../types/user.types";
 import { AdminDashboardScreenProps } from "../../navigation/types";
 import { Colors } from "../../theme/colors";
 import { getErrorMessage } from "../../utils/error";
+import Avatar from "../../components/ui/Avatar";
 
 export default function AdminDashboardScreen({
   navigation,
@@ -146,11 +147,15 @@ export default function AdminDashboardScreen({
             }
           >
             <View style={styles.cardLeft}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>
-                  {item.displayName.charAt(0).toUpperCase()}
-                </Text>
-              </View>
+              <Avatar
+                uri={item.avatarUrl}
+                name={item.displayName}
+                size={44}
+                style={styles.avatar}
+                backgroundColor={Colors.primary}
+                borderWidth={0}
+                textColor={Colors.black}
+              />
               <View style={styles.cardInfo}>
                 <Text style={styles.cardName}>{item.displayName}</Text>
                 <Text style={styles.cardEmail}>{item.email}</Text>
@@ -271,7 +276,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  avatarText: { fontSize: 18, fontWeight: "700", color: Colors.black },
   cardInfo: { flex: 1 },
   cardName: { fontSize: 15, fontWeight: "700", color: Colors.text },
   cardEmail: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },

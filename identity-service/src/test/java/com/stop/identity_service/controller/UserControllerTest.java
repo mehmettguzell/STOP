@@ -68,7 +68,8 @@ class UserControllerTest {
                 Instant.parse("2024-01-01T00:00:00Z"),
                 Instant.parse("2024-01-02T00:00:00Z"),
                 false,
-                false
+                false,
+                null
         );
 
         when(userService.getSelfUserResponseById(eq(targetUserId))).thenReturn(self);
@@ -92,7 +93,7 @@ class UserControllerTest {
 
     @Test
     void getUser_nonAdmin_returnsPublicResponse() {
-        UserPublicResponse publicResponse = new UserPublicResponse("User", BigDecimal.valueOf(5.0), BigDecimal.valueOf(6.0));
+        UserPublicResponse publicResponse = new UserPublicResponse(targetUserId, "User", BigDecimal.valueOf(5.0), BigDecimal.valueOf(6.0), null);
 
         when(userService.getPublicUserResponseById(eq(targetUserId))).thenReturn(publicResponse);
 
@@ -128,7 +129,8 @@ class UserControllerTest {
                 Instant.parse("2024-01-01T00:00:00Z"),
                 Instant.parse("2024-01-02T00:00:00Z"),
                 false,
-                false
+                false,
+                null
         );
 
         when(userService.getSelfUserResponseById(eq(currentUserId))).thenReturn(self);
@@ -160,7 +162,8 @@ class UserControllerTest {
                 Instant.parse("2024-01-01T00:00:00Z"),
                 Instant.parse("2024-01-02T00:00:00Z"),
                 false,
-                false
+                false,
+                null
         );
 
         Pageable expectedPageable = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "createdAt"));

@@ -17,6 +17,12 @@ export const userApi = {
     return data;
   },
 
+  getUsersByIds: async (userIds: string[]): Promise<UserPublicResponse[]> => {
+    if (userIds.length === 0) return [];
+    const { data } = await apiClient.post<UserPublicResponse[]>('/users/batch', { userIds });
+    return data;
+  },
+
   getAllUsers: async (page = 0, size = 20, search?: string): Promise<PageResponse<UserSelfResponse>> => {
     const { data } = await apiClient.get<PageResponse<UserSelfResponse>>(
       '/users/allUsers',

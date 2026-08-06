@@ -2,6 +2,8 @@ package com.stop.identity_service.user.controller;
 
 import com.stop.identity_service.config.jwt.SecurityUtils;
 import com.stop.identity_service.userProfile.dto.request.UpdateUserRequest;
+import com.stop.identity_service.user.dto.request.BatchUserIdsRequest;
+import com.stop.identity_service.user.dto.response.UserPublicResponse;
 import com.stop.identity_service.user.dto.response.UserSelfResponse;
 import com.stop.identity_service.user.service.UserService;
 import jakarta.validation.Valid;
@@ -13,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -45,6 +48,11 @@ public class UserController {
             return ResponseEntity.ok(userService.getSelfUserResponseById(userId));
         }
         return ResponseEntity.ok(userService.getPublicUserResponseById(userId));
+    }
+
+    @PostMapping("/batch")
+    public ResponseEntity<List<UserPublicResponse>> getUsersByIds(@RequestBody @Valid BatchUserIdsRequest request) {
+        return ResponseEntity.ok(userService.getPublicUsersByIds(request.userIds()));
     }
 
     @PatchMapping("/me")

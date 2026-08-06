@@ -9,6 +9,7 @@ import com.stop.identity_service.user.entity.user.Status;
 import com.stop.identity_service.user.entity.user.User;
 import com.stop.identity_service.user.repository.UserRepository;
 import com.stop.identity_service.user.service.UserService;
+import com.stop.identity_service.userProfile.repository.UserProfileRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -33,6 +34,9 @@ class UserServiceTest {
     private UserRepository userRepository;
 
     @Mock
+    private UserProfileRepository userProfileRepository;
+
+    @Mock
     private PasswordEncoder passwordEncoder;
 
     @InjectMocks
@@ -55,6 +59,7 @@ class UserServiceTest {
                 .build();
 
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(userProfileRepository.findAvatarUrlByUserId(id)).thenReturn(Optional.empty());
 
         UserSelfResponse res = userService.getSelfUserResponseById(id);
 
@@ -85,6 +90,7 @@ class UserServiceTest {
                 .build();
 
         when(userRepository.findById(id)).thenReturn(Optional.of(user));
+        when(userProfileRepository.findAvatarUrlByUserId(id)).thenReturn(Optional.empty());
 
         UserPublicResponse res = userService.getPublicUserResponseById(id);
 
