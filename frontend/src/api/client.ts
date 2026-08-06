@@ -55,7 +55,9 @@ const rewriteAvatarUrls = (data: unknown): unknown => {
     return data;
   }
   if (data && typeof data === "object") {
-    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(
+      data as Record<string, unknown>,
+    )) {
       if (key === "avatarUrl" && typeof value === "string") {
         (data as Record<string, unknown>)[key] = resolveAvatarUrl(value);
       } else {
