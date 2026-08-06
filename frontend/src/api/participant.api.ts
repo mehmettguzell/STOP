@@ -3,6 +3,7 @@ import {
   MatchParticipantResponse,
   ParticipationRequestResponse,
   TeamAssignmentRequest,
+  WaitlistEntryResponse,
 } from "../types/match.types";
 
 const BASE_PATH = "/participation";
@@ -90,6 +91,47 @@ export const participationApi = {
     const { data } = await apiClient.put<MatchParticipantResponse[]>(
       `${BASE_PATH}/matches/${matchId}/lineup`,
       entries,
+    );
+    return data;
+  },
+
+  joinWaitlist: async (matchId: string): Promise<WaitlistEntryResponse> => {
+    const { data } = await apiClient.post<WaitlistEntryResponse>(
+      `${BASE_PATH}/waitlist/join`,
+      { matchId },
+    );
+    return data;
+  },
+
+  leaveWaitlist: async (matchId: string): Promise<void> => {
+    await apiClient.post(`${BASE_PATH}/waitlist/leave`, { matchId });
+  },
+
+  removeFromWaitlist: async (matchId: string, userId: string): Promise<void> => {
+    await apiClient.post(`${BASE_PATH}/waitlist/remove`, { matchId, userId });
+  },
+
+  reorderWaitlist: async (
+    matchId: string,
+    entryIds: string[],
+  ): Promise<WaitlistEntryResponse[]> => {
+    const { data } = await apiClient.put<WaitlistEntryResponse[]>(
+      `${BASE_PATH}/waitlist/${matchId}/reorder`,
+      { entryIds },
+    );
+    return data;
+  },
+
+  getWaitlist: async (matchId: string): Promise<WaitlistEntryResponse[]> => {
+    const { data } = await apiClient.get<WaitlistEntryResponse[]>(
+      `${BASE_PATH}/waitlist/${matchId}`,
+    );
+    return data;
+  },
+
+  getMyWaitlistEntry: async (matchId: string): Promise<WaitlistEntryResponse | null> => {
+    const { data } = await apiClient.get<WaitlistEntryResponse | null>(
+      `${BASE_PATH}/waitlist/my/${matchId}`,
     );
     return data;
   },

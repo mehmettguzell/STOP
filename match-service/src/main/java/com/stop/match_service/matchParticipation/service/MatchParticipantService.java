@@ -17,6 +17,7 @@ import com.stop.match_service.matchParticipation.entity.TeamType;
 import com.stop.match_service.matchParticipation.kafka.event.ParticipantJoinedEvent;
 import com.stop.match_service.matchParticipation.kafka.event.ParticipantLeftEvent;
 import com.stop.match_service.matchParticipation.kafka.event.ParticipantRemovedEvent;
+import com.stop.match_service.matchParticipation.kafka.event.WaitlistPromotedEvent;
 import com.stop.match_service.matchParticipation.repository.MatchParticipantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,6 +48,7 @@ public class MatchParticipantService {
     private final MatchRepository matchRepository;
     private final MatchParticipantRepository repository;
     private final ApplicationEventPublisher eventPublisher;
+    private final WaitlistService waitlistService;
 
 
     @Transactional
@@ -310,7 +312,16 @@ public class MatchParticipantService {
         match.setParticipantCount(match.getParticipantCount() - 1);
         if (match.getStatus() == Status.FULL) {
             match.setStatus(Status.OPEN);
+            promoteFromWaitlist(match);
         }
+    }
+
+    private void promoteFromWaitlist(Match match) {
+        waitlistService.popNextWaiting(match.getId()).ifPresent(promotedUserId -> {
+            join(match, promotedUserId);
+            eventPublisher.publishEvent(new WaitlistPromotedEvent(match.getId(), promotedUserId, match.getOrganizerId(), Instant.now()));
+            log.info("Promoted user from waitlist. matchId={} userId={}", match.getId(), promotedUserId);
+        });
     }
 
     private MatchParticipant getJoinedParticipant(UUID matchId, UUID userId) {

@@ -4,6 +4,7 @@ export type MatchVisibility = 'PUBLIC' | 'PRIVATE';
 export type ParticipantStatus = 'JOINED' | 'LEFT' | 'REMOVED';
 export type TeamType = 'HOME' | 'AWAY';
 export type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+export type WaitlistStatus = 'WAITING' | 'PROMOTED' | 'CANCELLED';
 export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
 
 // ── Responses ──
@@ -41,6 +42,15 @@ export interface ParticipationRequestResponse {
   userID: string;
   matchId: string;
   status: RequestStatus;
+}
+
+export interface WaitlistEntryResponse {
+  id: string;
+  matchId: string;
+  userId: string;
+  status: WaitlistStatus;
+  createdAt: string;
+  position: number | null;
 }
 
 export interface InvitationResponse {

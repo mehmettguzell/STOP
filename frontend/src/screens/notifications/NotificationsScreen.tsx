@@ -30,6 +30,7 @@ const TYPE_META: Record<NotificationType, { icon: string; color: string }> = {
   PARTICIPANT_LEFT: { icon: "🚪", color: Colors.textMuted },
   FRIEND_REQUEST_RECEIVED: { icon: "👋", color: Colors.accent },
   FRIEND_REQUEST_ACCEPTED: { icon: "🤝", color: Colors.primary },
+  WAITLIST_PROMOTED: { icon: "🎉", color: Colors.success },
 };
 
 function timeAgo(isoString: string): string {
@@ -80,6 +81,7 @@ export default function NotificationsScreen({ navigation }: any) {
       "MATCH_COMPLETED",
       "PARTICIPANT_JOINED",
       "PARTICIPANT_LEFT",
+      "WAITLIST_PROMOTED",
     ];
     const friendTypes: NotificationType[] = [
       "FRIEND_REQUEST_RECEIVED",
