@@ -171,6 +171,17 @@ jobs:
           docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml pull
           ts "pull_done"
 
+          # identity-service's Dockerfile runs the app as non-root `appuser` (uid 100,
+          # gid 101), but a freshly-created named volume is always root-owned by
+          # Docker - nothing in the image chowns it. Fix ownership on every deploy
+          # (idempotent, no-op once correct) so this can't silently regress if the
+          # volume is ever recreated (disk migration, fresh instance, etc.) - a
+          # symptom that looked like a successful upload in the app logs but the
+          # file was never actually written.
+          ts "avatar_volume_chown_start"
+          docker run --rm -v stop_identity_avatars:/data/avatars alpine:3.21 chown -R 100:101 /data/avatars
+          ts "avatar_volume_chown_done"
+
           ts "up_start"
           if docker compose --env-file /opt/STOP/.env -f /opt/STOP/docker-compose.yml \
                up -d --remove-orphans --wait --wait-timeout 300; then
