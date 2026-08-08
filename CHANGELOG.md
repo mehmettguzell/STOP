@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0](https://github.com/mehmettguzell/STOP/compare/v1.2.0...v1.3.0) (2026-08-08)
+
+
+### Features
+
+* add match waitlist with automatic FIFO promotion ([4b033f0](https://github.com/mehmettguzell/STOP/commit/4b033f0317d15cea412c87d4426a000d20d87dd5))
+* show user avatars in lists and add batch user lookup ([d224ae3](https://github.com/mehmettguzell/STOP/commit/d224ae32cb5d9e3736b6c510331c9f57275c2f76))
+
+
+### Bug Fixes
+
+* disable Spring lazy-init for local dev (was silently killing all Kafka consumers) ([bf8c0c7](https://github.com/mehmettguzell/STOP/commit/bf8c0c74d634a073b637936e9842c713557854a6))
+* self-heal avatar volume ownership on every deploy ([543a613](https://github.com/mehmettguzell/STOP/commit/543a613f33c6c6550becf34a1f06f006383dcfb2))
+* stop baking a host into stored avatar URLs ([dca2502](https://github.com/mehmettguzell/STOP/commit/dca25029bb3f76195529c09b4e36767b8cd88054))
+
 ## [1.2.0](https://github.com/mehmettguzell/STOP/compare/v1.1.0...v1.2.0) (2026-08-05)
 
 
