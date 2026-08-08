@@ -21,7 +21,7 @@ export const setCachedToken = (token: string | null) => {
 
 const debuggerHost = Constants.expoConfig?.hostUri;
 // let host = "13.50.15.181";
-let host = "192.168.1.19";
+let host = "192.168.1.128";
 
 // if (debuggerHost) {
 //   host = debuggerHost.split(':')[0];
